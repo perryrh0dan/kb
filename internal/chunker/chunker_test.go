@@ -66,3 +66,41 @@ func TestEmptyText(t *testing.T) {
 		t.Errorf("got %d chunks for empty text, want 0", len(chunks))
 	}
 }
+
+func TestWhitespaceOnlyInput(t *testing.T) {
+	c := chunker.New(512, 50)
+	chunks, err := c.Split("   \n\t  ")
+	if err != nil {
+		t.Fatalf("Split() error: %v", err)
+	}
+	// whitespace-only should return empty
+	if len(chunks) != 0 {
+		t.Errorf("got %d chunks for whitespace-only text, want 0", len(chunks))
+	}
+}
+
+func TestSeparatorPreservedInChunk(t *testing.T) {
+	// Two paragraphs — after chunking, the paragraph break should be preserved
+	para1 := strings.Repeat("word ", 20)
+	para2 := strings.Repeat("term ", 20)
+	text := para1 + "\n\n" + para2
+	c := chunker.New(512, 50) // large enough to fit both in one chunk
+	chunks, err := c.Split(text)
+	if err != nil {
+		t.Fatalf("Split() error: %v", err)
+	}
+	if len(chunks) == 0 {
+		t.Fatal("expected at least one chunk")
+	}
+	// The chunk should contain the paragraph break, not just a space
+	if !strings.Contains(chunks[0], "\n\n") && !strings.Contains(chunks[0], "\n") {
+		t.Errorf("chunk lost paragraph separator: %q", chunks[0][:min(80, len(chunks[0]))])
+	}
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}

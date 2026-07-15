@@ -37,29 +37,34 @@ func (c *Chunker) Split(text string) ([]string, error) {
 	if strings.TrimSpace(text) == "" {
 		return nil, nil
 	}
-	chunks := c.splitRecursive(text, separators)
-	return c.mergeWithOverlap(chunks), nil
+	chunks, sep := c.splitRecursive(text, separators)
+	return c.mergeWithOverlap(chunks, sep), nil
 }
 
-func (c *Chunker) splitRecursive(text string, seps []string) []string {
+// splitRecursive returns the list of small segments and the separator that was
+// used to produce them (so mergeWithOverlap can rejoin with the correct sep).
+func (c *Chunker) splitRecursive(text string, seps []string) ([]string, string) {
 	if len(seps) == 0 || c.tokenCount(text) <= c.ChunkSize {
-		return []string{text}
+		return []string{text}, ""
 	}
 	sep := seps[0]
 	rest := seps[1:]
 
-	var parts []string
 	if sep == "" {
-		// character-level split
-		runes := []rune(text)
-		for i := 0; i < len(runes); i += c.ChunkSize {
-			end := i + c.ChunkSize
-			if end > len(runes) {
-				end = len(runes)
+		// character-level split: build token-bounded segments
+		var parts []string
+		var cur []rune
+		for _, r := range []rune(text) {
+			cur = append(cur, r)
+			if c.tokenCount(string(cur)) >= c.ChunkSize {
+				parts = append(parts, string(cur))
+				cur = cur[:0]
 			}
-			parts = append(parts, string(runes[i:end]))
 		}
-		return parts
+		if len(cur) > 0 {
+			parts = append(parts, string(cur))
+		}
+		return parts, ""
 	}
 
 	segments := strings.Split(text, sep)
@@ -71,14 +76,16 @@ func (c *Chunker) splitRecursive(text string, seps []string) []string {
 		if c.tokenCount(seg) <= c.ChunkSize {
 			result = append(result, seg)
 		} else {
-			result = append(result, c.splitRecursive(seg, rest)...)
+			subParts, _ := c.splitRecursive(seg, rest)
+			result = append(result, subParts...)
 		}
 	}
-	return result
+	return result, sep
 }
 
 // mergeWithOverlap joins small segments into chunks of ChunkSize with ChunkOverlap.
-func (c *Chunker) mergeWithOverlap(parts []string) []string {
+// sep is the separator used to split the segments (used when rejoining).
+func (c *Chunker) mergeWithOverlap(parts []string, sep string) []string {
 	if len(parts) == 0 {
 		return nil
 	}
@@ -90,7 +97,7 @@ func (c *Chunker) mergeWithOverlap(parts []string) []string {
 		if len(current) == 0 {
 			return
 		}
-		chunks = append(chunks, strings.Join(current, " "))
+		chunks = append(chunks, strings.Join(current, sep))
 	}
 
 	for _, part := range parts {
