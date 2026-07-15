@@ -15,12 +15,13 @@ type Embedder interface {
 }
 
 // New creates an Embedder based on the provider in cfg.
-func New(cfg config.EmbedderConfig) (Embedder, error) {
-	switch cfg.Provider {
+func New(embedCfg config.EmbedderConfig, oaiCfg config.OpenAIConfig) (Embedder, error) {
+	switch embedCfg.Provider {
 	case "openai":
 		// imported in Task 5
+		_ = oaiCfg // will be used by the openai subpackage
 		return nil, fmt.Errorf("openai embedder: not yet registered (import openai subpackage)")
 	default:
-		return nil, fmt.Errorf("unknown embedder provider: %q", cfg.Provider)
+		return nil, fmt.Errorf("unknown embedder provider: %q", embedCfg.Provider)
 	}
 }
