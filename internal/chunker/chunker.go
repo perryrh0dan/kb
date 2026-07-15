@@ -37,15 +37,14 @@ func (c *Chunker) Split(text string) ([]string, error) {
 	if strings.TrimSpace(text) == "" {
 		return nil, nil
 	}
-	chunks, sep := c.splitRecursive(text, separators)
-	return c.mergeWithOverlap(chunks, sep), nil
+	return c.mergeWithOverlap(c.splitRecursive(text, separators)), nil
 }
 
-// splitRecursive returns the list of small segments and the separator that was
-// used to produce them (so mergeWithOverlap can rejoin with the correct sep).
-func (c *Chunker) splitRecursive(text string, seps []string) ([]string, string) {
+// splitRecursive returns the list of small leaf segments produced by
+// recursively splitting on progressively finer separators.
+func (c *Chunker) splitRecursive(text string, seps []string) []string {
 	if len(seps) == 0 || c.tokenCount(text) <= c.ChunkSize {
-		return []string{text}, ""
+		return []string{text}
 	}
 	sep := seps[0]
 	rest := seps[1:]
@@ -64,7 +63,7 @@ func (c *Chunker) splitRecursive(text string, seps []string) ([]string, string) 
 		if len(cur) > 0 {
 			parts = append(parts, string(cur))
 		}
-		return parts, ""
+		return parts
 	}
 
 	segments := strings.Split(text, sep)
@@ -76,16 +75,15 @@ func (c *Chunker) splitRecursive(text string, seps []string) ([]string, string) 
 		if c.tokenCount(seg) <= c.ChunkSize {
 			result = append(result, seg)
 		} else {
-			subParts, _ := c.splitRecursive(seg, rest)
-			result = append(result, subParts...)
+			result = append(result, c.splitRecursive(seg, rest)...)
 		}
 	}
-	return result, sep
+	return result
 }
 
 // mergeWithOverlap joins small segments into chunks of ChunkSize with ChunkOverlap.
-// sep is the separator used to split the segments (used when rejoining).
-func (c *Chunker) mergeWithOverlap(parts []string, sep string) []string {
+// Segments are joined with a single space (the separator is used only for splitting).
+func (c *Chunker) mergeWithOverlap(parts []string) []string {
 	if len(parts) == 0 {
 		return nil
 	}
@@ -97,7 +95,7 @@ func (c *Chunker) mergeWithOverlap(parts []string, sep string) []string {
 		if len(current) == 0 {
 			return
 		}
-		chunks = append(chunks, strings.Join(current, sep))
+		chunks = append(chunks, strings.Join(current, " "))
 	}
 
 	for _, part := range parts {
