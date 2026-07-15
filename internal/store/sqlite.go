@@ -32,6 +32,9 @@ func NewSQLite(dbPath string) (Store, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open db: %w", err)
 	}
+	if err := db.PingContext(context.Background()); err != nil {
+		return nil, fmt.Errorf("ping db: %w", err)
+	}
 	if _, err := db.Exec(initSQL); err != nil {
 		return nil, fmt.Errorf("run migrations: %w", err)
 	}
@@ -101,7 +104,7 @@ func (s *sqliteStore) SaveChunks(ctx context.Context, chunks []Chunk) error {
 	}
 	defer tx.Rollback()
 	stmt, err := tx.PrepareContext(ctx,
-		`INSERT INTO chunks (id, document_id, content, chunk_index, embedding) VALUES (?, ?, ?, ?, ?)`)
+		`INSERT OR REPLACE INTO chunks (id, document_id, content, chunk_index, embedding) VALUES (?, ?, ?, ?, ?)`)
 	if err != nil {
 		return err
 	}
@@ -138,9 +141,10 @@ func (s *sqliteStore) Search(ctx context.Context, embedding []float32, limit int
 		       d.title, d.source_type, d.content_hash, d.metadata, d.ingested_at
 		FROM chunks c
 		JOIN documents d ON c.document_id = d.id
-		WHERE c.embedding IS NOT NULL`
+		WHERE c.embedding IS NOT NULL
+		  AND (1 - vec_distance_cosine(c.embedding, ?)) >= ?`
 
-	args := []interface{}{embBytes}
+	args := []interface{}{embBytes, embBytes, minScore}
 	if sourceFilter != "" {
 		query += " AND d.source_type = ?"
 		args = append(args, sourceFilter)
@@ -170,23 +174,43 @@ func (s *sqliteStore) Search(ctx context.Context, embedding []float32, limit int
 		r.Document.ID = r.Chunk.DocumentID
 		r.Document.IngestedAt, _ = time.Parse(time.RFC3339, ingestedAt)
 		json.Unmarshal([]byte(metaJSON), &r.Document.Metadata)
-		if r.Score >= minScore {
-			results = append(results, r)
-		}
+		results = append(results, r)
 	}
 	return results, rows.Err()
+}
+
+func (s *sqliteStore) GetChunks(ctx context.Context, documentID string) ([]Chunk, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id, document_id, content, chunk_index FROM chunks WHERE document_id = ? ORDER BY chunk_index`, documentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var chunks []Chunk
+	for rows.Next() {
+		var ch Chunk
+		if err := rows.Scan(&ch.ID, &ch.DocumentID, &ch.Content, &ch.ChunkIndex); err != nil {
+			return nil, err
+		}
+		chunks = append(chunks, ch)
+	}
+	return chunks, rows.Err()
 }
 
 func (s *sqliteStore) Stats(ctx context.Context) (map[string]interface{}, error) {
 	stats := map[string]interface{}{}
 	row := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM documents`)
 	var docCount int
-	row.Scan(&docCount)
+	if err := row.Scan(&docCount); err != nil {
+		return nil, err
+	}
 	stats["document_count"] = docCount
 
 	row = s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM chunks`)
 	var chunkCount int
-	row.Scan(&chunkCount)
+	if err := row.Scan(&chunkCount); err != nil {
+		return nil, err
+	}
 	stats["chunk_count"] = chunkCount
 
 	rows, _ := s.db.QueryContext(ctx,

@@ -81,6 +81,14 @@ func TestDeleteDocumentCascadesToChunks(t *testing.T) {
 	if got != nil {
 		t.Errorf("document still exists after delete")
 	}
+	// chunks should be cascade-deleted
+	chunks, err := s.GetChunks(ctx, doc.ID)
+	if err != nil {
+		t.Fatalf("GetChunks: %v", err)
+	}
+	if len(chunks) != 0 {
+		t.Errorf("expected 0 chunks after cascade delete, got %d", len(chunks))
+	}
 }
 
 func TestGetAllDocumentIDs(t *testing.T) {

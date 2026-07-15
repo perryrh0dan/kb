@@ -33,6 +33,7 @@ type Store interface {
 	// Chunk operations
 	SaveChunks(ctx context.Context, chunks []Chunk) error
 	DeleteChunks(ctx context.Context, documentID string) error
+	GetChunks(ctx context.Context, documentID string) ([]Chunk, error)
 
 	// Search
 	Search(ctx context.Context, embedding []float32, limit int, minScore float64, sourceFilter string) ([]SearchResult, error)
