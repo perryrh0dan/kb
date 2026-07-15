@@ -90,9 +90,13 @@ func runSource(ing *ingest.Ingester, src config.SourceConfig, force bool) error 
 	ctx := context.Background()
 	switch src.Type {
 	case "file":
-		exts := strings.Split(src.Extensions[0], ",")
-		if len(src.Extensions) > 1 {
-			exts = src.Extensions
+		exts := []string{"md", "txt", "pdf"} // default
+		if len(src.Extensions) > 0 {
+			if len(src.Extensions) == 1 {
+				exts = strings.Split(src.Extensions[0], ",")
+			} else {
+				exts = src.Extensions
+			}
 		}
 		s := file.New(src.Path, src.Recursive, exts)
 		stats, err := ing.Run(ctx, s, "file", force)
@@ -166,10 +170,14 @@ func registerSource(src config.SourceConfig) {
 	for i, s := range cfg.Sources {
 		if s.Type == src.Type && s.Path == src.Path && s.Space == src.Space {
 			cfg.Sources[i] = src
-			config.Save(cfg)
+			if err := config.Save(cfg); err != nil {
+				fmt.Fprintf(os.Stderr, "warning: could not save config: %v\n", err)
+			}
 			return
 		}
 	}
 	cfg.Sources = append(cfg.Sources, src)
-	config.Save(cfg)
+	if err := config.Save(cfg); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: could not save config: %v\n", err)
+	}
 }
