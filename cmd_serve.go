@@ -11,11 +11,22 @@ import (
 
 var serveCmd = &cobra.Command{
 	Use:   "serve",
-	Short: "Start MCP server (stdio)",
-	RunE:  runServe,
+	Short: "Start MCP server (stdio) — logs written to ~/.kb/kb.log",
+	// Override PersistentPreRunE so serve gets file logging, not stderr logging.
+	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+		_, err := initLogger(true)
+		return err
+	},
+	RunE: runServe,
 }
 
 func runServe(cmd *cobra.Command, args []string) error {
+	cleanup, err := initLogger(true)
+	if err != nil {
+		return err
+	}
+	defer cleanup()
+
 	st, err := store.NewSQLite(cfg.DB.Path)
 	if err != nil {
 		return fmt.Errorf("open store: %w", err)
