@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"strings"
@@ -38,7 +37,9 @@ var ingestConfluenceCmd = &cobra.Command{
 var (
 	flagRecursive bool
 	flagExt       string
-	flagForce     bool
+	flagFileForce bool
+	flagConfForce bool
+	flagAllForce  bool
 	flagSpace     string
 	flagPageID    string
 )
@@ -46,11 +47,12 @@ var (
 func init() {
 	ingestFileCmd.Flags().BoolVar(&flagRecursive, "recursive", false, "walk subdirectories")
 	ingestFileCmd.Flags().StringVar(&flagExt, "ext", "md,txt,pdf", "comma-separated file extensions")
-	ingestFileCmd.Flags().BoolVar(&flagForce, "force", false, "force full re-index")
+	ingestFileCmd.Flags().BoolVar(&flagFileForce, "force", false, "force full re-index")
 	ingestConfluenceCmd.Flags().StringVar(&flagSpace, "space", "", "Confluence space key (required)")
 	ingestConfluenceCmd.Flags().StringVar(&flagPageID, "page", "", "scope to a single page ID")
-	ingestConfluenceCmd.Flags().BoolVar(&flagForce, "force", false, "force full re-index")
+	ingestConfluenceCmd.Flags().BoolVar(&flagConfForce, "force", false, "force full re-index")
 	ingestConfluenceCmd.MarkFlagRequired("space")
+	ingestCmd.Flags().BoolVar(&flagAllForce, "force", false, "force full re-index for all sources")
 	ingestCmd.AddCommand(ingestFileCmd, ingestConfluenceCmd)
 }
 
@@ -79,15 +81,15 @@ func runIngestAll(cmd *cobra.Command, args []string) error {
 	defer st.Close()
 
 	for _, src := range cfg.Sources {
-		if err := runSource(ing, src, false); err != nil {
+		if err := runSource(cmd, ing, src, flagAllForce); err != nil {
 			fmt.Fprintf(os.Stderr, "error ingesting %s: %v\n", src.Type, err)
 		}
 	}
 	return nil
 }
 
-func runSource(ing *ingest.Ingester, src config.SourceConfig, force bool) error {
-	ctx := context.Background()
+func runSource(cmd *cobra.Command, ing *ingest.Ingester, src config.SourceConfig, force bool) error {
+	ctx := cmd.Context()
 	switch src.Type {
 	case "file":
 		exts := []string{"md", "txt", "pdf"} // default
@@ -132,9 +134,9 @@ func runIngestFile(cmd *cobra.Command, args []string) error {
 	}
 	defer st.Close()
 
-	ctx := context.Background()
+	ctx := cmd.Context()
 	src := file.New(path, flagRecursive, exts)
-	stats, err := ing.Run(ctx, src, "file", flagForce)
+	stats, err := ing.Run(ctx, src, "file", flagFileForce)
 	if err != nil {
 		return err
 	}
@@ -154,9 +156,9 @@ func runIngestConfluence(cmd *cobra.Command, args []string) error {
 	}
 	defer st.Close()
 
-	ctx := context.Background()
+	ctx := cmd.Context()
 	src := confluence.New(cfg.Confluence, flagSpace, flagPageID)
-	stats, err := ing.Run(ctx, src, "confluence", flagForce)
+	stats, err := ing.Run(ctx, src, "confluence", flagConfForce)
 	if err != nil {
 		return err
 	}

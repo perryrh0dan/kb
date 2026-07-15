@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"strings"
 
@@ -43,7 +42,7 @@ func runSearch(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("create embedder: %w", err)
 	}
 
-	ctx := context.Background()
+	ctx := cmd.Context()
 	vecs, err := emb.Embed(ctx, []string{query})
 	if err != nil {
 		return fmt.Errorf("embed query: %w", err)

@@ -37,7 +37,7 @@ mv kb /usr/local/bin/kb
 kb config init
 ```
 
-This creates `~/.config/kb/config.yaml` with default settings. Edit it to add your OpenAI API key and any sources.
+This creates `~/.kb/config.yaml` with default settings. Edit it to add your OpenAI API key and any sources.
 
 ### 2. Ingest local files
 
@@ -91,7 +91,7 @@ Replace `/path/to/kb` with the absolute path to the `kb` binary. OpenCode will s
 | Variable | Description | Default |
 |---|---|---|
 | `KB_OPENAI_API_KEY` | OpenAI API key for generating embeddings | — |
-| `KB_DB_PATH` | Path to the SQLite database file | `~/.local/share/kb/kb.db` |
+| `KB_DB_PATH` | Path to the SQLite database file | `~/.kb/kb.db` |
 | `KB_CONFLUENCE_API_TOKEN` | Confluence Cloud API token (email:token format) | — |
 | `KB_CONFLUENCE_PAT` | Confluence Data Center personal access token | — |
 
@@ -164,10 +164,10 @@ CGO_ENABLED=1 go test -tags integration ./...
 
 ## Configuration File
 
-`kb config init` creates a YAML config at `~/.config/kb/config.yaml`:
+`kb config init` creates a YAML config at `~/.kb/config.yaml`:
 
 ```yaml
-db_path: ~/.local/share/kb/kb.db
+db_path: ~/.kb/kb.db
 openai_api_key: ""   # or set KB_OPENAI_API_KEY
 sources: []
 ```

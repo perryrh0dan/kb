@@ -7,6 +7,8 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"time"
 
 	sqlite_vec "github.com/asg017/sqlite-vec-go-bindings/cgo"
@@ -28,6 +30,9 @@ type sqliteStore struct {
 
 // NewSQLite opens (or creates) the SQLite database at dbPath and runs migrations.
 func NewSQLite(dbPath string) (Store, error) {
+	if err := os.MkdirAll(filepath.Dir(dbPath), 0700); err != nil {
+		return nil, fmt.Errorf("create db dir: %w", err)
+	}
 	db, err := sql.Open("sqlite3", dbPath+"?_foreign_keys=on&_journal_mode=WAL")
 	if err != nil {
 		return nil, fmt.Errorf("open db: %w", err)
@@ -179,6 +184,8 @@ func (s *sqliteStore) Search(ctx context.Context, embedding []float32, limit int
 	return results, rows.Err()
 }
 
+// GetChunks returns chunks for the given document ID.
+// Note: Embedding field is not populated to avoid loading large vectors.
 func (s *sqliteStore) GetChunks(ctx context.Context, documentID string) ([]Chunk, error) {
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT id, document_id, content, chunk_index FROM chunks WHERE document_id = ? ORDER BY chunk_index`, documentID)
@@ -225,7 +232,9 @@ func (s *sqliteStore) Stats(ctx context.Context) (map[string]interface{}, error)
 		for rows.Next() {
 			var st, last string
 			var cnt int
-			rows.Scan(&st, &cnt, &last)
+			if err := rows.Scan(&st, &cnt, &last); err != nil {
+				continue // skip malformed rows rather than panic
+			}
 			bySource[st] = srcStat{Count: cnt, LastIngest: last}
 		}
 		stats["by_source"] = bySource
