@@ -3,6 +3,7 @@ package file
 import (
 	"context"
 	"io/fs"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -28,12 +29,14 @@ func New(path string, recursive bool, extensions []string) adapters.Source {
 }
 
 func (f *fileSource) Documents(ctx context.Context) (<-chan adapters.Document, error) {
+	log := slog.Default()
 	ch := make(chan adapters.Document)
 	go func() {
 		defer close(ch)
 		_ = filepath.WalkDir(f.path, func(p string, d fs.DirEntry, err error) error {
 			if err != nil {
-				return nil // skip unreadable
+				log.Warn("skipping unreadable path", "path", p, "error", err)
+				return nil
 			}
 			if ctx.Err() != nil {
 				return ctx.Err()
@@ -50,6 +53,7 @@ func (f *fileSource) Documents(ctx context.Context) (<-chan adapters.Document, e
 			}
 			content, err := os.ReadFile(p)
 			if err != nil {
+				log.Warn("failed to read file", "path", p, "error", err)
 				return nil
 			}
 			info, _ := d.Info()
@@ -57,7 +61,11 @@ func (f *fileSource) Documents(ctx context.Context) (<-chan adapters.Document, e
 			if info != nil {
 				modTime = info.ModTime()
 			}
-			absPath, _ := filepath.Abs(p)
+			absPath, err := filepath.Abs(p)
+			if err != nil {
+				log.Warn("failed to resolve absolute path", "path", p, "error", err)
+				return nil
+			}
 			doc := adapters.Document{
 				ID:          "file://" + absPath,
 				Title:       filepath.Base(p),
@@ -71,6 +79,7 @@ func (f *fileSource) Documents(ctx context.Context) (<-chan adapters.Document, e
 				},
 				IngestedAt: time.Now().UTC(),
 			}
+			log.Debug("found file", "path", absPath)
 			select {
 			case ch <- doc:
 			case <-ctx.Done():

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"regexp"
 	"strings"
@@ -74,6 +75,7 @@ type pagesResponse struct {
 }
 
 func (c *confluenceSource) Documents(ctx context.Context) (<-chan adapters.Document, error) {
+	log := slog.Default()
 	ch := make(chan adapters.Document)
 	go func() {
 		defer close(ch)
@@ -84,9 +86,11 @@ func (c *confluenceSource) Documents(ctx context.Context) (<-chan adapters.Docum
 		for url != "" {
 			resp, err := c.doRequest(ctx, url)
 			if err != nil {
+				log.Warn("confluence HTTP request failed", "url", url, "error", err)
 				return
 			}
 			if resp.StatusCode >= 400 {
+				log.Warn("confluence HTTP error", "url", url, "status", resp.StatusCode)
 				resp.Body.Close()
 				return
 			}
@@ -95,19 +99,21 @@ func (c *confluenceSource) Documents(ctx context.Context) (<-chan adapters.Docum
 
 			var pr pagesResponse
 			if c.pageID != "" {
-				// single page response
 				var single pageResult
 				if err := json.Unmarshal(body, &single); err != nil {
+					log.Warn("failed to parse single page response", "page_id", c.pageID, "error", err)
 					return
 				}
 				pr.Results = []pageResult{single}
 			} else {
 				if err := json.Unmarshal(body, &pr); err != nil {
+					log.Warn("failed to parse pages response", "url", url, "error", err)
 					return
 				}
 			}
 
 			for _, page := range pr.Results {
+				log.Debug("fetched confluence page", "id", page.ID, "title", page.Title)
 				content := stripHTML(page.Body.Storage.Value)
 				doc := adapters.Document{
 					ID:          fmt.Sprintf("confluence://%s/%s", c.space, page.ID),

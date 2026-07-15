@@ -3,6 +3,7 @@ package openai
 import (
 	"context"
 	"fmt"
+	"log/slog"
 
 	oai "github.com/sashabaranov/go-openai"
 	"github.com/user/kb/config"
@@ -39,6 +40,7 @@ func (e *openAIEmbedder) Dimensions() int   { return e.dims }
 func (e *openAIEmbedder) ModelName() string { return string(e.model) }
 
 func (e *openAIEmbedder) Embed(ctx context.Context, texts []string) ([][]float32, error) {
+	log := slog.Default()
 	var results [][]float32
 	for i := 0; i < len(texts); i += batchSize {
 		end := i + batchSize
@@ -46,11 +48,13 @@ func (e *openAIEmbedder) Embed(ctx context.Context, texts []string) ([][]float32
 			end = len(texts)
 		}
 		batch := texts[i:end]
+		log.Debug("embedding batch", "batch_start", i, "batch_end", end, "model", e.model)
 		resp, err := e.client.CreateEmbeddings(ctx, oai.EmbeddingRequest{
 			Input: batch,
 			Model: e.model,
 		})
 		if err != nil {
+			log.Warn("embedding batch failed", "batch_start", i, "batch_end", end, "error", err)
 			return nil, fmt.Errorf("openai embed batch [%d:%d]: %w", i, end, err)
 		}
 		for _, d := range resp.Data {
