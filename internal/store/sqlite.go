@@ -7,6 +7,7 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"time"
@@ -220,9 +221,11 @@ func (s *sqliteStore) Stats(ctx context.Context) (map[string]interface{}, error)
 	}
 	stats["chunk_count"] = chunkCount
 
-	rows, _ := s.db.QueryContext(ctx,
+	rows, err := s.db.QueryContext(ctx,
 		`SELECT source_type, COUNT(*), MAX(ingested_at) FROM documents GROUP BY source_type`)
-	if rows != nil {
+	if err != nil {
+		slog.Default().Warn("stats by_source query failed", "error", err)
+	} else {
 		defer rows.Close()
 		type srcStat struct {
 			Count      int    `json:"count"`
@@ -233,7 +236,8 @@ func (s *sqliteStore) Stats(ctx context.Context) (map[string]interface{}, error)
 			var st, last string
 			var cnt int
 			if err := rows.Scan(&st, &cnt, &last); err != nil {
-				continue // skip malformed rows rather than panic
+				slog.Default().Warn("stats by_source scan failed", "error", err)
+				continue
 			}
 			bySource[st] = srcStat{Count: cnt, LastIngest: last}
 		}
