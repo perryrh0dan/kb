@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/user/kb/config"
+	oaiemb "github.com/user/kb/internal/embedder/openai"
 )
 
 // Embedder converts text slices into float32 vectors.
@@ -18,9 +19,7 @@ type Embedder interface {
 func New(embedCfg config.EmbedderConfig, oaiCfg config.OpenAIConfig) (Embedder, error) {
 	switch embedCfg.Provider {
 	case "openai":
-		// imported in Task 5
-		_ = oaiCfg // will be used by the openai subpackage
-		return nil, fmt.Errorf("openai embedder: not yet registered (import openai subpackage)")
+		return oaiemb.New(embedCfg, oaiCfg)
 	default:
 		return nil, fmt.Errorf("unknown embedder provider: %q", embedCfg.Provider)
 	}
