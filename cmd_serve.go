@@ -4,6 +4,9 @@ import (
 	"fmt"
 
 	"github.com/spf13/cobra"
+	"github.com/user/kb/internal/embedder"
+	mcpserver "github.com/user/kb/internal/mcp"
+	"github.com/user/kb/internal/store"
 )
 
 var serveCmd = &cobra.Command{
@@ -13,6 +16,17 @@ var serveCmd = &cobra.Command{
 }
 
 func runServe(cmd *cobra.Command, args []string) error {
-	fmt.Println("MCP server: implemented in Task 10")
-	return nil
+	st, err := store.NewSQLite(cfg.DB.Path)
+	if err != nil {
+		return fmt.Errorf("open store: %w", err)
+	}
+	defer st.Close()
+
+	emb, err := embedder.New(cfg.Embedder, cfg.OpenAI)
+	if err != nil {
+		return fmt.Errorf("create embedder: %w", err)
+	}
+
+	srv := mcpserver.New(st, emb)
+	return srv.Run(cmd.Context())
 }
