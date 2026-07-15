@@ -113,5 +113,56 @@ func TestIngestPrunesDeletedDocuments(t *testing.T) {
 	}
 }
 
+func TestIngestForceReindex(t *testing.T) {
+	st, err := store.NewSQLite(t.TempDir() + "/test.db")
+	if err != nil {
+		t.Fatalf("NewSQLite: %v", err)
+	}
+	defer st.Close()
+	c := chunker.New(512, 50)
+	emb := &stubEmbedder{dims: 3072}
+	ing := ingest.New(st, c, emb)
+	doc := makeDoc("file:///a.md", "hello world")
+
+	// First ingest
+	ing.Run(context.Background(), &stubSource{docs: []adapters.Document{doc}}, "file", false)
+	// Second ingest with same content but force=true
+	stats, err := ing.Run(context.Background(), &stubSource{docs: []adapters.Document{doc}}, "file", true)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if stats.Ingested != 1 {
+		t.Errorf("force=true: ingested = %d, want 1", stats.Ingested)
+	}
+	if stats.Skipped != 0 {
+		t.Errorf("force=true: skipped = %d, want 0", stats.Skipped)
+	}
+}
+
+func TestIngestZeroChunkFallback(t *testing.T) {
+	st, err := store.NewSQLite(t.TempDir() + "/test.db")
+	if err != nil {
+		t.Fatalf("NewSQLite: %v", err)
+	}
+	defer st.Close()
+	c := chunker.New(512, 50)
+	emb := &stubEmbedder{dims: 3072}
+	ing := ingest.New(st, c, emb)
+	// Use empty content to trigger the zero-chunk path
+	doc := makeDoc("file:///empty.md", "")
+	stats, err := ing.Run(context.Background(), &stubSource{docs: []adapters.Document{doc}}, "file", false)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	// Empty content → chunker returns nil → fallback to []string{""} → 1 chunk embedded
+	// Document should be ingested (not error)
+	if stats.Errors != 0 {
+		t.Errorf("errors = %d, want 0", stats.Errors)
+	}
+	if stats.Ingested != 1 {
+		t.Errorf("ingested = %d, want 1", stats.Ingested)
+	}
+}
+
 // Ensure the stubEmbedder satisfies the embedder.Embedder interface at compile time.
 var _ embedder.Embedder = (*stubEmbedder)(nil)

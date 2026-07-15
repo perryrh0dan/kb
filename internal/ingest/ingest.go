@@ -73,21 +73,26 @@ func (ing *Ingester) Run(ctx context.Context, src adapters.Source, sourceType st
 			chunks = []string{doc.Content}
 		}
 
+		// 1. Delete old chunks FIRST
+		if err := ing.store.DeleteChunks(ctx, doc.ID); err != nil {
+			stats.Errors++
+			continue
+		}
+
+		// 2. Upsert document SECOND
+		if err := ing.store.UpsertDocument(ctx, doc); err != nil {
+			stats.Errors++
+			continue
+		}
+
+		// 3. Embed THIRD
 		embeddings, err := ing.embedder.Embed(ctx, chunks)
 		if err != nil {
 			stats.Errors++
 			continue
 		}
 
-		if err := ing.store.DeleteChunks(ctx, doc.ID); err != nil {
-			stats.Errors++
-			continue
-		}
-		if err := ing.store.UpsertDocument(ctx, doc); err != nil {
-			stats.Errors++
-			continue
-		}
-
+		// 4. Save chunks LAST
 		storeChunks := make([]store.Chunk, len(chunks))
 		for i, text := range chunks {
 			storeChunks[i] = store.Chunk{
@@ -108,8 +113,11 @@ func (ing *Ingester) Run(ctx context.Context, src adapters.Source, sourceType st
 	// Phase 2: prune documents no longer in source
 	for id := range known {
 		if !seen[id] {
-			_ = ing.store.DeleteDocument(ctx, id)
-			stats.Pruned++
+			if err := ing.store.DeleteDocument(ctx, id); err != nil {
+				stats.Errors++
+			} else {
+				stats.Pruned++
+			}
 		}
 	}
 
