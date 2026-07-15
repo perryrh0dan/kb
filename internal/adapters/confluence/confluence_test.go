@@ -79,3 +79,31 @@ func TestConfluenceHTMLStripped(t *testing.T) {
 		t.Errorf("content still contains HTML: %q", doc.Content[:20])
 	}
 }
+
+func TestConfluencePATAuth(t *testing.T) {
+	var receivedAuth string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		receivedAuth = r.Header.Get("Authorization")
+		resp := map[string]interface{}{
+			"results": []map[string]interface{}{},
+			"_links":  map[string]interface{}{},
+		}
+		json.NewEncoder(w).Encode(resp)
+	}))
+	defer srv.Close()
+
+	cfg := config.ConfluenceConfig{
+		BaseURL: srv.URL,
+		PAT:     "my-pat-token",
+	}
+	src := confluence.New(cfg, "ENG", "")
+	ch, err := src.Documents(context.Background())
+	if err != nil {
+		t.Fatalf("Documents: %v", err)
+	}
+	for range ch {} // drain
+
+	if receivedAuth != "Bearer my-pat-token" {
+		t.Errorf("Authorization header = %q, want %q", receivedAuth, "Bearer my-pat-token")
+	}
+}

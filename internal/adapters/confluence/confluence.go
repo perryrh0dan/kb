@@ -83,7 +83,11 @@ func (c *confluenceSource) Documents(ctx context.Context) (<-chan adapters.Docum
 		}
 		for url != "" {
 			resp, err := c.doRequest(ctx, url)
-			if err != nil || resp.StatusCode >= 400 {
+			if err != nil {
+				return
+			}
+			if resp.StatusCode >= 400 {
+				resp.Body.Close()
 				return
 			}
 			body, _ := io.ReadAll(resp.Body)
@@ -93,10 +97,14 @@ func (c *confluenceSource) Documents(ctx context.Context) (<-chan adapters.Docum
 			if c.pageID != "" {
 				// single page response
 				var single pageResult
-				json.Unmarshal(body, &single) //nolint:errcheck
+				if err := json.Unmarshal(body, &single); err != nil {
+					return
+				}
 				pr.Results = []pageResult{single}
 			} else {
-				json.Unmarshal(body, &pr) //nolint:errcheck
+				if err := json.Unmarshal(body, &pr); err != nil {
+					return
+				}
 			}
 
 			for _, page := range pr.Results {
