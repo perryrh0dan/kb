@@ -3,6 +3,7 @@ package ingest
 import (
 	"context"
 	"fmt"
+	"log/slog"
 
 	"github.com/google/uuid"
 	"github.com/user/kb/internal/adapters"
@@ -33,6 +34,7 @@ func New(st store.Store, c *chunker.Chunker, emb embedder.Embedder) *Ingester {
 
 // Run ingests all documents from src. force=true skips hash check.
 func (ing *Ingester) Run(ctx context.Context, src adapters.Source, sourceType string, force bool) (IngestStats, error) {
+	log := slog.Default()
 	var stats IngestStats
 
 	knownIDs, err := ing.store.GetAllDocumentIDs(ctx, sourceType)
@@ -59,13 +61,17 @@ func (ing *Ingester) Run(ctx context.Context, src adapters.Source, sourceType st
 		if !force {
 			existing, err := ing.store.GetDocument(ctx, doc.ID)
 			if err == nil && existing != nil && existing.ContentHash == doc.ContentHash {
+				log.Debug("document unchanged, skipping", "id", doc.ID)
 				stats.Skipped++
 				continue
 			}
 		}
 
+		log.Debug("ingesting document", "id", doc.ID, "title", doc.Title)
+
 		chunks, err := ing.chunker.Split(doc.Content)
 		if err != nil {
+			log.Warn("chunker failed", "id", doc.ID, "error", err)
 			stats.Errors++
 			continue
 		}
@@ -75,12 +81,14 @@ func (ing *Ingester) Run(ctx context.Context, src adapters.Source, sourceType st
 
 		// 1. Delete old chunks FIRST
 		if err := ing.store.DeleteChunks(ctx, doc.ID); err != nil {
+			log.Warn("failed to delete old chunks", "id", doc.ID, "error", err)
 			stats.Errors++
 			continue
 		}
 
 		// 2. Upsert document SECOND
 		if err := ing.store.UpsertDocument(ctx, doc); err != nil {
+			log.Warn("failed to upsert document", "id", doc.ID, "error", err)
 			stats.Errors++
 			continue
 		}
@@ -88,6 +96,7 @@ func (ing *Ingester) Run(ctx context.Context, src adapters.Source, sourceType st
 		// 3. Embed THIRD
 		embeddings, err := ing.embedder.Embed(ctx, chunks)
 		if err != nil {
+			log.Warn("embedding failed", "id", doc.ID, "chunks", len(chunks), "error", err)
 			stats.Errors++
 			continue
 		}
@@ -104,18 +113,23 @@ func (ing *Ingester) Run(ctx context.Context, src adapters.Source, sourceType st
 			}
 		}
 		if err := ing.store.SaveChunks(ctx, storeChunks); err != nil {
+			log.Warn("failed to save chunks", "id", doc.ID, "error", err)
 			stats.Errors++
 			continue
 		}
+		log.Info("document ingested", "id", doc.ID, "chunks", len(chunks))
 		stats.Ingested++
 	}
 
 	// Phase 2: prune documents no longer in source
 	for id := range known {
 		if !seen[id] {
+			log.Debug("pruning deleted document", "id", id)
 			if err := ing.store.DeleteDocument(ctx, id); err != nil {
+				log.Warn("failed to prune document", "id", id, "error", err)
 				stats.Errors++
 			} else {
+				log.Info("document pruned", "id", id)
 				stats.Pruned++
 			}
 		}
