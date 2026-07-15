@@ -12,12 +12,7 @@ import (
 var serveCmd = &cobra.Command{
 	Use:   "serve",
 	Short: "Start MCP server (stdio) — logs written to ~/.kb/kb.log",
-	// Override PersistentPreRunE so serve gets file logging, not stderr logging.
-	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-		_, err := initLogger(true)
-		return err
-	},
-	RunE: runServe,
+	RunE:  runServe,
 }
 
 func runServe(cmd *cobra.Command, args []string) error {

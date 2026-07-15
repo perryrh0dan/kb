@@ -68,7 +68,10 @@ func initLogger(toFile bool) (func(), error) {
 	opts := &slog.HandlerOptions{Level: level}
 
 	if toFile {
-		home, _ := os.UserHomeDir()
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return func() {}, fmt.Errorf("resolve home dir: %w", err)
+		}
 		logPath := filepath.Join(home, ".kb", "kb.log")
 		if err := os.MkdirAll(filepath.Dir(logPath), 0700); err != nil {
 			return func() {}, fmt.Errorf("create log dir: %w", err)
