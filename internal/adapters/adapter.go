@@ -21,4 +21,12 @@ type Source interface {
 	// Documents streams all documents from this source.
 	// The channel is closed when all documents have been sent or ctx is cancelled.
 	Documents(ctx context.Context) (<-chan Document, error)
+
+	// ScopePrefix returns the document ID prefix that identifies this source's
+	// scope in the store. Only documents whose IDs start with this prefix are
+	// considered for pruning during ingest. Examples:
+	//   "file:///abs/path/to/dir/"   — all files under that directory
+	//   "confluence://ENG/"          — all pages in space ENG
+	//   "confluence://ENG/12345"     — exactly page 12345
+	ScopePrefix() string
 }

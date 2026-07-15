@@ -104,11 +104,30 @@ func TestGetAllDocumentIDs(t *testing.T) {
 			SourceType: src, Metadata: map[string]string{}, IngestedAt: time.Now().UTC(),
 		})
 	}
-	ids, err := s.GetAllDocumentIDs(ctx, "file")
+	// Prefix-based: "file:///" matches all file docs
+	ids, err := s.GetAllDocumentIDs(ctx, "file:///")
 	if err != nil {
 		t.Fatalf("GetAllDocumentIDs: %v", err)
 	}
 	if len(ids) != 2 {
 		t.Errorf("got %d file IDs, want 2", len(ids))
+	}
+
+	// Prefix-based: "confluence://ENG/" matches only ENG docs
+	confIDs, err := s.GetAllDocumentIDs(ctx, "confluence://ENG/")
+	if err != nil {
+		t.Fatalf("GetAllDocumentIDs confluence: %v", err)
+	}
+	if len(confIDs) != 1 {
+		t.Errorf("got %d confluence ENG IDs, want 1", len(confIDs))
+	}
+
+	// Prefix-based: "file:///a" matches only a.md, not b.md
+	narrowIDs, err := s.GetAllDocumentIDs(ctx, "file:///a")
+	if err != nil {
+		t.Fatalf("GetAllDocumentIDs narrow: %v", err)
+	}
+	if len(narrowIDs) != 1 {
+		t.Errorf("got %d narrow IDs, want 1", len(narrowIDs))
 	}
 }

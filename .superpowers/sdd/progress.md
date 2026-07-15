@@ -36,3 +36,15 @@ Task 11: complete (commits ccefc0e..44d884f, review clean)
   Minor noted: ingested=1 assertion could be more precise; os.WriteFile error ignored in test; placeholder GitHub URL in README
 
 ALL TASKS COMPLETE
+Final review fixes: complete (commit ba8bd85)
+  - DB dir creation fix, flagForce split, --force on ingest all, Stats scan error, go mod tidy, README paths fixed, cmd.Context(), unused min removed
+BRANCH READY TO MERGE
+
+## Logging Feature
+Logging Task 1: complete (commits ba8bd85..ac876d1, review clean after fd leak fix + UserHomeDir error)
+Logging Task 2: complete (commits ac876d1..787bd16, review clean)
+Logging Task 3: complete (commits 787bd16..4d10df4, review clean)
+Logging Task 4: complete (commits 4d10df4..20af8fb, review clean)
+  Minor: log var captured in closures (ok); error msg format inconsistency; rows.Err() not checked
+
+ALL LOGGING TASKS COMPLETE

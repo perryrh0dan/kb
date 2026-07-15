@@ -14,7 +14,10 @@ import (
 )
 
 // stubSource emits a fixed list of documents.
-type stubSource struct{ docs []adapters.Document }
+type stubSource struct {
+	docs   []adapters.Document
+	prefix string // scope prefix for pruning
+}
 
 func (s *stubSource) Documents(ctx context.Context) (<-chan adapters.Document, error) {
 	ch := make(chan adapters.Document, len(s.docs))
@@ -23,6 +26,13 @@ func (s *stubSource) Documents(ctx context.Context) (<-chan adapters.Document, e
 	}
 	close(ch)
 	return ch, nil
+}
+
+func (s *stubSource) ScopePrefix() string {
+	if s.prefix != "" {
+		return s.prefix
+	}
+	return "file:///"
 }
 
 // stubEmbedder returns zero vectors.
@@ -92,16 +102,20 @@ func TestIngestPrunesDeletedDocuments(t *testing.T) {
 	emb := &stubEmbedder{dims: 3072}
 	ing := ingest.New(st, c, emb)
 
+	// Both docs share the same scope prefix — simulates a single directory scan.
+	scope := "file:///"
+
 	// Ingest two docs
-	ing.Run(context.Background(), &stubSource{docs: []adapters.Document{
-		makeDoc("file:///a.md", "aaa"),
-		makeDoc("file:///b.md", "bbb"),
-	}}, "file", false)
+	ing.Run(context.Background(), &stubSource{
+		docs:   []adapters.Document{makeDoc("file:///a.md", "aaa"), makeDoc("file:///b.md", "bbb")},
+		prefix: scope,
+	}, "file", false)
 
 	// Second ingest — only one doc remains in source
-	stats, _ := ing.Run(context.Background(), &stubSource{docs: []adapters.Document{
-		makeDoc("file:///a.md", "aaa"),
-	}}, "file", false)
+	stats, _ := ing.Run(context.Background(), &stubSource{
+		docs:   []adapters.Document{makeDoc("file:///a.md", "aaa")},
+		prefix: scope,
+	}, "file", false)
 
 	if stats.Pruned != 1 {
 		t.Errorf("pruned = %d, want 1", stats.Pruned)
@@ -110,6 +124,49 @@ func TestIngestPrunesDeletedDocuments(t *testing.T) {
 	doc, _ := st.GetDocument(context.Background(), "file:///b.md")
 	if doc != nil {
 		t.Errorf("file:///b.md still exists after prune")
+	}
+}
+
+// TestIngestScopedPruning verifies that pruning is limited to the source's scope.
+// Documents outside the scope must NOT be deleted even if unseen.
+func TestIngestScopedPruning(t *testing.T) {
+	st, err := store.NewSQLite(t.TempDir() + "/test.db")
+	if err != nil {
+		t.Fatalf("NewSQLite: %v", err)
+	}
+	defer st.Close()
+
+	c := chunker.New(512, 50)
+	emb := &stubEmbedder{dims: 3072}
+	ing := ingest.New(st, c, emb)
+
+	// First: ingest a doc from a different scope (security/)
+	security := &stubSource{
+		docs:   []adapters.Document{makeDoc("file:///docs/security/auth.md", "auth content")},
+		prefix: "file:///docs/security/",
+	}
+	if _, err := ing.Run(context.Background(), security, "file", false); err != nil {
+		t.Fatalf("first ingest: %v", err)
+	}
+
+	// Second: ingest from a different scope (k8s/) — should NOT prune security doc
+	k8s := &stubSource{
+		docs:   []adapters.Document{makeDoc("file:///docs/k8s/deploy.md", "deploy content")},
+		prefix: "file:///docs/k8s/",
+	}
+	stats, err := ing.Run(context.Background(), k8s, "file", false)
+	if err != nil {
+		t.Fatalf("second ingest: %v", err)
+	}
+
+	if stats.Pruned != 0 {
+		t.Errorf("pruned = %d, want 0 (security doc should not be pruned)", stats.Pruned)
+	}
+
+	// Security doc must still exist
+	doc, _ := st.GetDocument(context.Background(), "file:///docs/security/auth.md")
+	if doc == nil {
+		t.Errorf("security doc was wrongly pruned by k8s ingest")
 	}
 }
 

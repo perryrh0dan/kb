@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	sqlite_vec "github.com/asg017/sqlite-vec-go-bindings/cgo"
@@ -86,8 +87,13 @@ func (s *sqliteStore) DeleteDocument(ctx context.Context, id string) error {
 	return err
 }
 
-func (s *sqliteStore) GetAllDocumentIDs(ctx context.Context, sourceType string) ([]string, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id FROM documents WHERE source_type = ?`, sourceType)
+func (s *sqliteStore) GetAllDocumentIDs(ctx context.Context, idPrefix string) ([]string, error) {
+	// Escape LIKE special characters in the prefix so literal % and _ in paths
+	// are treated as literal characters, not wildcards.
+	escaped := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(idPrefix)
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id FROM documents WHERE id LIKE ? ESCAPE '\'`,
+		escaped+"%")
 	if err != nil {
 		return nil, err
 	}

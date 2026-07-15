@@ -37,6 +37,18 @@ func New(cfg config.ConfluenceConfig, space, pageID string) adapters.Source {
 	return &confluenceSource{cfg: cfg, space: space, pageID: pageID, client: &http.Client{Timeout: 30 * time.Second}}
 }
 
+// ScopePrefix returns the document ID prefix for this confluence source.
+// If a specific page is being ingested, the scope is that exact page's ID.
+// Otherwise it covers all pages in the space.
+func (c *confluenceSource) ScopePrefix() string {
+	if c.pageID != "" {
+		// Exact match for a single page — no trailing slash
+		return fmt.Sprintf("confluence://%s/%s", c.space, c.pageID)
+	}
+	// All pages in the space — trailing slash prevents "ENG2" matching "ENG"
+	return fmt.Sprintf("confluence://%s/", c.space)
+}
+
 func (c *confluenceSource) doRequest(ctx context.Context, url string) (*http.Response, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {

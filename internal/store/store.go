@@ -28,7 +28,9 @@ type Store interface {
 	GetDocument(ctx context.Context, id string) (*adapters.Document, error)
 	UpsertDocument(ctx context.Context, doc adapters.Document) error
 	DeleteDocument(ctx context.Context, id string) error
-	GetAllDocumentIDs(ctx context.Context, sourceType string) ([]string, error)
+	// GetAllDocumentIDs returns IDs of all documents whose ID starts with idPrefix.
+	// Use the source's ScopePrefix() as the prefix to limit pruning to that scope.
+	GetAllDocumentIDs(ctx context.Context, idPrefix string) ([]string, error)
 
 	// Chunk operations
 	SaveChunks(ctx context.Context, chunks []Chunk) error

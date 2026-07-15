@@ -28,6 +28,20 @@ func New(path string, recursive bool, extensions []string) adapters.Source {
 	return &fileSource{path: path, recursive: recursive, extensions: exts}
 }
 
+// ScopePrefix returns the document ID prefix for this file source.
+// Only docs whose IDs start with this prefix are pruned during ingest.
+func (f *fileSource) ScopePrefix() string {
+	abs, err := filepath.Abs(f.path)
+	if err != nil {
+		abs = f.path
+	}
+	// Ensure trailing slash so "file:///docs/k8s/" doesn't match "file:///docs/k8s2/"
+	if len(abs) > 0 && abs[len(abs)-1] != '/' {
+		abs += "/"
+	}
+	return "file://" + abs
+}
+
 func (f *fileSource) Documents(ctx context.Context) (<-chan adapters.Document, error) {
 	log := slog.Default()
 	ch := make(chan adapters.Document)

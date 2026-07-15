@@ -37,7 +37,13 @@ func (ing *Ingester) Run(ctx context.Context, src adapters.Source, sourceType st
 	log := slog.Default()
 	var stats IngestStats
 
-	knownIDs, err := ing.store.GetAllDocumentIDs(ctx, sourceType)
+	// Use the source's scope prefix to limit pruning to only documents that
+	// belong to this specific source (e.g. one directory, one Confluence space).
+	// This prevents ingesting ./docs/k8s/ from deleting docs from ./docs/security/.
+	scopePrefix := src.ScopePrefix()
+	log.Debug("ingest run started", "source_type", sourceType, "scope_prefix", scopePrefix, "force", force)
+
+	knownIDs, err := ing.store.GetAllDocumentIDs(ctx, scopePrefix)
 	if err != nil {
 		return stats, fmt.Errorf("get known ids: %w", err)
 	}
