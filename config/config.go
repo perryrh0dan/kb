@@ -5,54 +5,54 @@ import (
 	"path/filepath"
 
 	"github.com/spf13/viper"
+	"gopkg.in/yaml.v3"
 )
 
 type OpenAIConfig struct {
-	APIKey string `mapstructure:"api_key"`
+	APIKey string `mapstructure:"api_key" yaml:"api_key"`
 }
 
 type ConfluenceConfig struct {
-	BaseURL  string `mapstructure:"base_url"`
-	Username string `mapstructure:"username"`
-	APIToken string `mapstructure:"api_token"`
-	PAT      string `mapstructure:"pat"`
+	BaseURL  string `mapstructure:"base_url"  yaml:"base_url"`
+	Username string `mapstructure:"username"  yaml:"username"`
+	APIToken string `mapstructure:"api_token" yaml:"api_token"`
+	PAT      string `mapstructure:"pat"       yaml:"pat"`
 }
 
 type DBConfig struct {
-	Path string `mapstructure:"path"`
+	Path string `mapstructure:"path" yaml:"path"`
 }
 
 type EmbedderConfig struct {
-	Provider string `mapstructure:"provider"`
-	Model    string `mapstructure:"model"`
+	Provider string `mapstructure:"provider" yaml:"provider"`
+	Model    string `mapstructure:"model"    yaml:"model"`
 }
 
 type ChunkerConfig struct {
-	ChunkSize    int `mapstructure:"chunk_size"`
-	ChunkOverlap int `mapstructure:"chunk_overlap"`
+	ChunkSize    int `mapstructure:"chunk_size"    yaml:"chunk_size"`
+	ChunkOverlap int `mapstructure:"chunk_overlap" yaml:"chunk_overlap"`
 }
 
 type SourceConfig struct {
-	Type       string   `mapstructure:"type"`
-	Path       string   `mapstructure:"path,omitempty"`
-	Recursive  bool     `mapstructure:"recursive,omitempty"`
-	Extensions []string `mapstructure:"extensions,omitempty"`
-	Space      string   `mapstructure:"space,omitempty"`
-	PageID     string   `mapstructure:"page_id,omitempty"`
+	Type       string   `mapstructure:"type"                 yaml:"type"`
+	Path       string   `mapstructure:"path,omitempty"       yaml:"path,omitempty"`
+	Recursive  bool     `mapstructure:"recursive,omitempty"  yaml:"recursive,omitempty"`
+	Extensions []string `mapstructure:"extensions,omitempty" yaml:"extensions,omitempty"`
+	Space      string   `mapstructure:"space,omitempty"      yaml:"space,omitempty"`
+	PageID     string   `mapstructure:"page_id,omitempty"    yaml:"page_id,omitempty"`
 }
 
 type Config struct {
-	OpenAI     OpenAIConfig     `mapstructure:"openai"`
-	Confluence ConfluenceConfig `mapstructure:"confluence"`
-	DB         DBConfig         `mapstructure:"db"`
-	Embedder   EmbedderConfig   `mapstructure:"embedder"`
-	Chunker    ChunkerConfig    `mapstructure:"chunker"`
-	Sources    []SourceConfig   `mapstructure:"sources"`
+	OpenAI     OpenAIConfig     `mapstructure:"openai"      yaml:"openai"`
+	Confluence ConfluenceConfig `mapstructure:"confluence"  yaml:"confluence"`
+	DB         DBConfig         `mapstructure:"db"          yaml:"db"`
+	Embedder   EmbedderConfig   `mapstructure:"embedder"    yaml:"embedder"`
+	Chunker    ChunkerConfig    `mapstructure:"chunker"     yaml:"chunker"`
+	Sources    []SourceConfig   `mapstructure:"sources"     yaml:"sources"`
 }
 
 func defaultConfigPath() string {
-	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".kb", "config.yaml")
+	return filepath.Join(mustHomeDir(), ".kb", "config.yaml")
 }
 
 func newViper() *viper.Viper {
@@ -64,10 +64,10 @@ func newViper() *viper.Viper {
 	v.SetDefault("db.path", filepath.Join(mustHomeDir(), ".kb", "kb.db"))
 
 	v.SetEnvPrefix("KB")
-	v.BindEnv("openai.api_key", "KB_OPENAI_API_KEY")       //nolint:errcheck
+	v.BindEnv("openai.api_key", "KB_OPENAI_API_KEY")            //nolint:errcheck
 	v.BindEnv("confluence.api_token", "KB_CONFLUENCE_API_TOKEN") //nolint:errcheck
-	v.BindEnv("confluence.pat", "KB_CONFLUENCE_PAT")        //nolint:errcheck
-	v.BindEnv("db.path", "KB_DB_PATH")                      //nolint:errcheck
+	v.BindEnv("confluence.pat", "KB_CONFLUENCE_PAT")            //nolint:errcheck
+	v.BindEnv("db.path", "KB_DB_PATH")                          //nolint:errcheck
 
 	return v
 }
@@ -144,18 +144,15 @@ sources: []
 	return os.WriteFile(path, []byte(content), 0600)
 }
 
-// Save writes the config back to disk (used to register sources).
+// Save writes the config back to disk using yaml tags for correct key names.
 func Save(cfg *Config) error {
 	path := defaultConfigPath()
 	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
 		return err
 	}
-	v := newViper()
-	v.Set("openai", cfg.OpenAI)
-	v.Set("confluence", cfg.Confluence)
-	v.Set("db", cfg.DB)
-	v.Set("embedder", cfg.Embedder)
-	v.Set("chunker", cfg.Chunker)
-	v.Set("sources", cfg.Sources)
-	return v.WriteConfigAs(path)
+	b, err := yaml.Marshal(cfg)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, b, 0600)
 }

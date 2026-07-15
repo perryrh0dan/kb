@@ -9,7 +9,9 @@ import (
 )
 
 func TestLoadDefaults(t *testing.T) {
-	// No config file, no env vars — should return defaults
+	// Redirect HOME to an empty temp dir so no real ~/.kb/config.yaml is read.
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
 	t.Setenv("KB_OPENAI_API_KEY", "")
 	t.Setenv("KB_DB_PATH", "")
 
@@ -32,6 +34,8 @@ func TestLoadDefaults(t *testing.T) {
 }
 
 func TestEnvVarOverride(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
 	t.Setenv("KB_OPENAI_API_KEY", "sk-test-key")
 	t.Setenv("KB_DB_PATH", "/tmp/test.db")
 
@@ -70,5 +74,39 @@ chunker:
 	}
 	if cfg.Chunker.ChunkSize != 256 {
 		t.Errorf("chunk_size = %d, want 256", cfg.Chunker.ChunkSize)
+	}
+}
+
+func TestSaveRoundTrip(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+	t.Setenv("KB_OPENAI_API_KEY", "")
+	t.Setenv("KB_DB_PATH", "")
+
+	cfg := &config.Config{}
+	cfg.OpenAI.APIKey = "sk-roundtrip"
+	cfg.Chunker.ChunkSize = 256
+	cfg.Chunker.ChunkOverlap = 25
+	cfg.DB.Path = "/tmp/test.db"
+
+	if err := config.Save(cfg); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	loaded, err := config.Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if loaded.OpenAI.APIKey != "sk-roundtrip" {
+		t.Errorf("api_key = %q, want %q", loaded.OpenAI.APIKey, "sk-roundtrip")
+	}
+	if loaded.Chunker.ChunkSize != 256 {
+		t.Errorf("chunk_size = %d, want 256", loaded.Chunker.ChunkSize)
+	}
+	if loaded.Chunker.ChunkOverlap != 25 {
+		t.Errorf("chunk_overlap = %d, want 25", loaded.Chunker.ChunkOverlap)
+	}
+	if loaded.DB.Path != "/tmp/test.db" {
+		t.Errorf("db.path = %q, want %q", loaded.DB.Path, "/tmp/test.db")
 	}
 }
