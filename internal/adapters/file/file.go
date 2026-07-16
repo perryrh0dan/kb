@@ -2,6 +2,7 @@ package file
 
 import (
 	"context"
+	"errors"
 	"io/fs"
 	"log/slog"
 	"os"
@@ -65,10 +66,26 @@ func (f *fileSource) Documents(ctx context.Context) (<-chan adapters.Document, e
 			if !f.extensions[ext] {
 				return nil
 			}
-			content, err := os.ReadFile(p)
-			if err != nil {
-				log.Warn("failed to read file", "path", p, "error", err)
-				return nil
+			// Extract content — PDFs need text extraction, other formats are read as-is.
+			var content string
+			if ext == "pdf" {
+				text, err := extractPDFText(p)
+				if err != nil {
+					if errors.Is(err, errNoText) {
+						log.Warn("pdf has no extractable text, skipping", "path", p)
+					} else {
+						log.Warn("failed to extract pdf text", "path", p, "error", err)
+					}
+					return nil
+				}
+				content = text
+			} else {
+				raw, err := os.ReadFile(p)
+				if err != nil {
+					log.Warn("failed to read file", "path", p, "error", err)
+					return nil
+				}
+				content = string(raw)
 			}
 			info, _ := d.Info()
 			modTime := time.Time{}
@@ -83,8 +100,8 @@ func (f *fileSource) Documents(ctx context.Context) (<-chan adapters.Document, e
 			doc := adapters.Document{
 				ID:          "file://" + absPath,
 				Title:       filepath.Base(p),
-				Content:     string(content),
-				ContentHash: store.ContentHash(string(content)),
+				Content:     content,
+				ContentHash: store.ContentHash(content),
 				SourceType:  "file",
 				Metadata: map[string]string{
 					"path":     absPath,
