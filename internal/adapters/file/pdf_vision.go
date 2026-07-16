@@ -21,8 +21,8 @@ const visionPrompt = `Describe ONLY the visual elements on this image: diagrams,
 // imgTagRe matches <img src="data:image/TYPE;base64,DATA"> tags in HTML.
 var imgTagRe = regexp.MustCompile(`<img\s[^>]*src="data:image/([a-zA-Z+]+);base64,([^"]+)"`)
 
-// pathTagRe matches <path ...> elements in SVG.
-var pathTagRe = regexp.MustCompile(`<path\s([^>]*)>|<path\s([^/]*)/?>`)
+// pathTagRe matches <path ...> elements in SVG (both self-closing and non-self-closing).
+var pathTagRe = regexp.MustCompile(`<path\b[^>]*/?>`) 
 
 // fontIDRe matches path ids that are font glyphs (id="font_...").
 var fontIDRe = regexp.MustCompile(`\bid="font_`)
@@ -58,10 +58,9 @@ func extractRasterImages(html string) [][]byte {
 			// Try raw (no padding) variants — some encoders omit or misalign padding
 			stripped := strings.TrimRight(data, "=")
 			decoded, err = base64.RawStdEncoding.DecodeString(stripped)
-		}
-		if err != nil {
-			stripped := strings.TrimRight(data, "=")
-			decoded, err = base64.RawURLEncoding.DecodeString(stripped)
+			if err != nil {
+				decoded, err = base64.RawURLEncoding.DecodeString(stripped)
+			}
 		}
 		if err != nil {
 			slog.Default().Warn("failed to decode base64 image from PDF HTML", "error", err)
@@ -142,7 +141,7 @@ func describeVisuals(ctx context.Context, client *oai.Client, model string, imag
 	for _, imgBytes := range images {
 		// Detect MIME type from magic bytes
 		mime := "image/png"
-		if len(imgBytes) >= 3 && imgBytes[0] == 0xFF && imgBytes[1] == 0xD8 {
+		if len(imgBytes) >= 2 && imgBytes[0] == 0xFF && imgBytes[1] == 0xD8 {
 			mime = "image/jpeg"
 		}
 		encoded := base64.StdEncoding.EncodeToString(imgBytes)
