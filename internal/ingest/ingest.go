@@ -92,24 +92,25 @@ func (ing *Ingester) Run(ctx context.Context, src adapters.Source, sourceType st
 			chunks = []string{doc.Content}
 		}
 
-		// 1. Delete old chunks FIRST
+		// 1. Embed FIRST — if this fails the document hash is NOT written to the DB,
+		// so the next ingest run will retry rather than skipping with a stale hash.
+		embeddings, err := ing.embedder.Embed(ctx, chunks)
+		if err != nil {
+			log.Warn("embedding failed", "id", doc.ID, "chunks", len(chunks), "error", err)
+			stats.Errors++
+			continue
+		}
+
+		// 2. Delete old chunks SECOND (only after we know embedding succeeded)
 		if err := ing.store.DeleteChunks(ctx, doc.ID); err != nil {
 			log.Warn("failed to delete old chunks", "id", doc.ID, "error", err)
 			stats.Errors++
 			continue
 		}
 
-		// 2. Upsert document SECOND
+		// 3. Upsert document THIRD — hash written only after successful embed
 		if err := ing.store.UpsertDocument(ctx, doc); err != nil {
 			log.Warn("failed to upsert document", "id", doc.ID, "error", err)
-			stats.Errors++
-			continue
-		}
-
-		// 3. Embed THIRD
-		embeddings, err := ing.embedder.Embed(ctx, chunks)
-		if err != nil {
-			log.Warn("embedding failed", "id", doc.ID, "chunks", len(chunks), "error", err)
 			stats.Errors++
 			continue
 		}

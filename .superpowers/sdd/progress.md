@@ -48,3 +48,34 @@ Logging Task 4: complete (commits 4d10df4..20af8fb, review clean)
   Minor: log var captured in closures (ok); error msg format inconsistency; rows.Err() not checked
 
 ALL LOGGING TASKS COMPLETE
+
+## PDF Vision Feature
+Vision Task 1: complete (commits 94bdc0e..dce7f4c, review clean)
+Vision Task 2: complete (commits dce7f4c..bd436f3, review clean after pathTagRe fix)
+  Minor noted: trailing space on regex line; TestExtractRasterImages_MultipleFormats uses technically invalid base64 (passes in practice via RawStdEncoding)
+Vision Task 3: complete (commits bd436f3..6092a1b, review clean after gofmt fix)
+  Minor noted: new WARN log on unreadable PDF pages (previously silent) — intentional improvement
+
+ALL PDF VISION TASKS COMPLETE
+
+## Provider Refactoring
+Provider Task 1: complete (commits 24dd904..3d6e245, review clean)
+  Minor: TestSaveRoundTrip lost ChunkOverlap+DB.Path assertions and env-var isolation guards
+Provider Task 2: complete (commits 3d6e245..fdc5720, review clean)
+  Minor: azure doc comment misleading; no factory-level test; concrete return types vs interface
+Provider Task 3: complete (commits fdc5720..f5530ae, review clean)
+  Minor: dims hardcoded to 3072; error message de-branded; old New() constructor removed
+
+ALL PROVIDER REFACTORING TASKS COMPLETE
+
+## Lazy Loading Refactoring
+Lazy Task 1: complete (commits 6dca6a9..b7fc966, review clean)
+  Minor: ScopePrefix doc comment examples removed
+Lazy Task 2: complete (commits b7fc966..1790804, review clean)
+  Minor: errNoContent now propagates from Load() — ingestor should handle it gracefully (not as fatal error)
+  Minor: PDF files read twice in Load() (rawBytes wasted, fitz opens independently)
+Lazy Task 3: complete (commits 1790804..07db29d, review clean after ID parsing fix + io.ReadAll error handling)
+  Note: ingestor was also updated in this task (Task 4 is now partially done)
+Lazy Task 4: complete (commit f1a7e7c, TestIngestLoadNotCalledOnSkip added and passing)
+
+ALL LAZY LOADING TASKS COMPLETE
