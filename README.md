@@ -195,7 +195,17 @@ embedder:
   model: text-embedding-3-large   # deployment name on the hub
 ```
 
-All fields can also be set via environment variables (see table above).
+| Env var | Config field |
+|---|---|
+| `KB_GENAI_HUB_ENDPOINT` | `providers.genai_hub.endpoint` |
+| `KB_GENAI_HUB_API_KEY` | `providers.genai_hub.api_key` |
+| `KB_GENAI_HUB_CLIENT_ID` | `providers.genai_hub.client_id` |
+| `KB_GENAI_HUB_CLIENT_SECRET` | `providers.genai_hub.client_secret` |
+| `KB_GENAI_HUB_TENANT_ID` | `providers.genai_hub.tenant_id` |
+| `KB_GENAI_HUB_SCOPE` | `providers.genai_hub.scope` |
+| `KB_GENAI_HUB_API_VERSION` | `providers.genai_hub.api_version` |
+
+All fields can also be set via the environment variables listed in the table above.
 
 ## License
 
