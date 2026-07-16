@@ -34,6 +34,12 @@ type ChunkerConfig struct {
 	ChunkOverlap int `mapstructure:"chunk_overlap" yaml:"chunk_overlap"`
 }
 
+type VisionConfig struct {
+	Enabled bool    `mapstructure:"enabled" yaml:"enabled"`
+	Model   string  `mapstructure:"model"   yaml:"model"`
+	DPI     float64 `mapstructure:"dpi"     yaml:"dpi"`
+}
+
 type SourceConfig struct {
 	Type       string   `mapstructure:"type"                 yaml:"type"`
 	Path       string   `mapstructure:"path,omitempty"       yaml:"path,omitempty"`
@@ -49,6 +55,7 @@ type Config struct {
 	DB         DBConfig         `mapstructure:"db"          yaml:"db"`
 	Embedder   EmbedderConfig   `mapstructure:"embedder"    yaml:"embedder"`
 	Chunker    ChunkerConfig    `mapstructure:"chunker"     yaml:"chunker"`
+	Vision     VisionConfig     `mapstructure:"vision"      yaml:"vision"`
 	Sources    []SourceConfig   `mapstructure:"sources"     yaml:"sources"`
 }
 
@@ -63,6 +70,9 @@ func newViper() *viper.Viper {
 	v.SetDefault("chunker.chunk_size", 512)
 	v.SetDefault("chunker.chunk_overlap", 50)
 	v.SetDefault("db.path", filepath.Join(mustHomeDir(), ".kb", "kb.db"))
+	v.SetDefault("vision.enabled", false)
+	v.SetDefault("vision.model", "gpt-4o")
+	v.SetDefault("vision.dpi", 150.0)
 
 	v.SetEnvPrefix("KB")
 	v.BindEnv("openai.api_key", "KB_OPENAI_API_KEY")            //nolint:errcheck
@@ -150,6 +160,11 @@ embedder:
 chunker:
   chunk_size: 512
   chunk_overlap: 50
+
+vision:
+  enabled: false  # true to describe PDF images via GPT-4o Vision (requires api_key)
+  model: gpt-4o
+  dpi: 150        # resolution for SVG rendering (72-300)
 
 # sources are auto-registered when you run: kb ingest file <path> / kb ingest confluence --space <KEY>
 sources: []

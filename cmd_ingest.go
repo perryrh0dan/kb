@@ -100,7 +100,7 @@ func runSource(cmd *cobra.Command, ing *ingest.Ingester, src config.SourceConfig
 				exts = src.Extensions
 			}
 		}
-		s := file.New(src.Path, src.Recursive, exts)
+		s := file.New(src.Path, src.Recursive, exts, file.Options{})
 		stats, err := ing.Run(ctx, s, "file", force)
 		if err != nil {
 			return err
@@ -135,7 +135,7 @@ func runIngestFile(cmd *cobra.Command, args []string) error {
 	defer st.Close()
 
 	ctx := cmd.Context()
-	src := file.New(path, flagRecursive, exts)
+	src := file.New(path, flagRecursive, exts, file.Options{})
 	stats, err := ing.Run(ctx, src, "file", flagFileForce)
 	if err != nil {
 		return err

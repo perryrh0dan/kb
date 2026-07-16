@@ -10,23 +10,37 @@ import (
 	"strings"
 	"time"
 
+	oai "github.com/sashabaranov/go-openai"
+	"github.com/user/kb/config"
 	"github.com/user/kb/internal/adapters"
 	"github.com/user/kb/internal/store"
 )
+
+// VisionOptions configures GPT-4o Vision analysis for PDF images.
+type VisionOptions struct {
+	Config config.VisionConfig
+	Client *oai.Client
+}
+
+// Options configures optional capabilities of the file adapter.
+type Options struct {
+	Vision *VisionOptions // nil = Vision disabled
+}
 
 type fileSource struct {
 	path       string
 	recursive  bool
 	extensions map[string]bool
+	opts       Options
 }
 
 // New creates a file Source. extensions should be like []string{"md","txt","pdf"}.
-func New(path string, recursive bool, extensions []string) adapters.Source {
+func New(path string, recursive bool, extensions []string, opts Options) adapters.Source {
 	exts := make(map[string]bool, len(extensions))
 	for _, e := range extensions {
 		exts[strings.ToLower(strings.TrimPrefix(e, "."))] = true
 	}
-	return &fileSource{path: path, recursive: recursive, extensions: exts}
+	return &fileSource{path: path, recursive: recursive, extensions: exts, opts: opts}
 }
 
 // ScopePrefix returns the document ID prefix for this file source.

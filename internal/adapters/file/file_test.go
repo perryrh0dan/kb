@@ -16,7 +16,7 @@ func TestFileAdapterFindsMarkdown(t *testing.T) {
 	os.WriteFile(filepath.Join(dir, "b.txt"), []byte("plain text"), 0644)
 	os.WriteFile(filepath.Join(dir, "c.go"), []byte("package main"), 0644)
 
-	src := file.New(dir, false, []string{"md", "txt"})
+	src := file.New(dir, false, []string{"md", "txt"}, file.Options{})
 	ch, err := src.Documents(context.Background())
 	if err != nil {
 		t.Fatalf("Documents: %v", err)
@@ -37,7 +37,7 @@ func TestFileAdapterRecursive(t *testing.T) {
 	os.WriteFile(filepath.Join(dir, "root.md"), []byte("root"), 0644)
 	os.WriteFile(filepath.Join(sub, "child.md"), []byte("child"), 0644)
 
-	src := file.New(dir, true, []string{"md"})
+	src := file.New(dir, true, []string{"md"}, file.Options{})
 	ch, err := src.Documents(context.Background())
 	if err != nil {
 		t.Fatalf("Documents: %v", err)
@@ -56,7 +56,7 @@ func TestFileAdapterDocumentFields(t *testing.T) {
 	content := []byte("# My Doc\n\nSome content here.")
 	os.WriteFile(filepath.Join(dir, "test.md"), content, 0644)
 
-	src := file.New(dir, false, []string{"md"})
+	src := file.New(dir, false, []string{"md"}, file.Options{})
 	ch, _ := src.Documents(context.Background())
 	doc := <-ch
 
