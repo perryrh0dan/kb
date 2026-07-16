@@ -37,7 +37,6 @@ type confluenceSource struct {
 func New(cfg config.ConfluenceConfig, space, pageID string) adapters.Source {
 	transport := http.DefaultTransport
 	if cfg.TLSInsecureSkipVerify {
-		slog.Warn("confluence: TLS certificate verification disabled — do not use in production")
 		transport = &http.Transport{
 			TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec
 		}

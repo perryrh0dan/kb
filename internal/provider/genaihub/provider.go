@@ -5,7 +5,6 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"os"
 
@@ -53,7 +52,6 @@ func New(cfg config.GenAIHubProviderConfig) (*genAIHubProvider, error) {
 	// Build TLS configuration.
 	tlsCfg := &tls.Config{}
 	if cfg.TLSInsecureSkipVerify {
-		slog.Warn("genai_hub: TLS certificate verification disabled — do not use in production")
 		tlsCfg.InsecureSkipVerify = true //nolint:gosec
 	}
 	if cfg.TLSCACertFile != "" {
