@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 
 	oai "github.com/sashabaranov/go-openai"
 	"github.com/user/kb/config"
@@ -45,24 +46,43 @@ func (e *openAIEmbedder) ModelName() string { return string(e.model) }
 
 func (e *openAIEmbedder) Embed(ctx context.Context, texts []string) ([][]float32, error) {
 	log := slog.Default()
-	var results [][]float32
-	for i := 0; i < len(texts); i += batchSize {
-		end := i + batchSize
-		if end > len(texts) {
-			end = len(texts)
+
+	// Filter out empty/whitespace-only strings before sending to the API.
+	// Track original indices so we can reconstruct a full-length result slice.
+	type indexedText struct {
+		orig int
+		text string
+	}
+	var nonempty []indexedText
+	for i, t := range texts {
+		if strings.TrimSpace(t) != "" {
+			nonempty = append(nonempty, indexedText{i, t})
 		}
-		batch := texts[i:end]
-		log.Debug("embedding batch", "batch_start", i, "batch_end", end, "model", e.model)
+	}
+
+	results := make([][]float32, len(texts)) // nil entries for empty inputs
+
+	for batchStart := 0; batchStart < len(nonempty); batchStart += batchSize {
+		batchEnd := batchStart + batchSize
+		if batchEnd > len(nonempty) {
+			batchEnd = len(nonempty)
+		}
+		batch := nonempty[batchStart:batchEnd]
+		strs := make([]string, len(batch))
+		for j, it := range batch {
+			strs[j] = it.text
+		}
+		log.Debug("embedding batch", "batch_start", batchStart, "batch_end", batchEnd, "model", e.model)
 		resp, err := e.client.CreateEmbeddings(ctx, oai.EmbeddingRequest{
-			Input: batch,
+			Input: strs,
 			Model: e.model,
 		})
 		if err != nil {
-			log.Warn("embedding batch failed", "batch_start", i, "batch_end", end, "error", err)
-			return nil, fmt.Errorf("embed batch [%d:%d]: %w", i, end, err)
+			log.Warn("embedding batch failed", "batch_start", batchStart, "batch_end", batchEnd, "error", err)
+			return nil, fmt.Errorf("embed batch [%d:%d]: %w", batchStart, batchEnd, err)
 		}
-		for _, d := range resp.Data {
-			results = append(results, d.Embedding)
+		for j, d := range resp.Data {
+			results[batch[j].orig] = d.Embedding
 		}
 	}
 	return results, nil

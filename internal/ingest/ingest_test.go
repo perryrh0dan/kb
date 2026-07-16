@@ -218,19 +218,20 @@ func TestIngestZeroChunkFallback(t *testing.T) {
 	c := chunker.New(512, 50)
 	emb := &stubEmbedder{dims: 3072}
 	ing := ingest.New(st, c, emb)
-	// Use empty content to trigger the zero-chunk path
+	// Empty content — chunker returns nil chunks, document should be skipped (not an error)
 	doc := makeDoc("file:///empty.md", "")
 	stats, err := ing.Run(context.Background(), &stubSource{docs: []adapters.Document{doc}}, "file", false)
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
-	// Empty content → chunker returns nil → fallback to []string{""} → 1 chunk embedded
-	// Document should be ingested (not error)
 	if stats.Errors != 0 {
 		t.Errorf("errors = %d, want 0", stats.Errors)
 	}
-	if stats.Ingested != 1 {
-		t.Errorf("ingested = %d, want 1", stats.Ingested)
+	if stats.Skipped != 1 {
+		t.Errorf("skipped = %d, want 1", stats.Skipped)
+	}
+	if stats.Ingested != 0 {
+		t.Errorf("ingested = %d, want 0", stats.Ingested)
 	}
 }
 

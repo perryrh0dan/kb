@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/user/kb/internal/adapters"
@@ -89,6 +90,11 @@ func (ing *Ingester) Run(ctx context.Context, src adapters.Source, sourceType st
 			continue
 		}
 		if len(chunks) == 0 {
+			if strings.TrimSpace(doc.Content) == "" {
+				log.Debug("skipping document with empty content", "id", doc.ID)
+				stats.Skipped++
+				continue
+			}
 			chunks = []string{doc.Content}
 		}
 
@@ -115,16 +121,20 @@ func (ing *Ingester) Run(ctx context.Context, src adapters.Source, sourceType st
 			continue
 		}
 
-		// 4. Save chunks LAST
-		storeChunks := make([]store.Chunk, len(chunks))
+		// 4. Save chunks LAST — skip any that had no embedding (empty content)
+		var storeChunks []store.Chunk
 		for i, text := range chunks {
-			storeChunks[i] = store.Chunk{
+			if embeddings[i] == nil {
+				log.Debug("skipping empty chunk", "id", doc.ID, "chunk_index", i)
+				continue
+			}
+			storeChunks = append(storeChunks, store.Chunk{
 				ID:         uuid.New().String(),
 				DocumentID: doc.ID,
 				Content:    text,
 				ChunkIndex: i,
 				Embedding:  embeddings[i],
-			}
+			})
 		}
 		if err := ing.store.SaveChunks(ctx, storeChunks); err != nil {
 			log.Warn("failed to save chunks", "id", doc.ID, "error", err)
