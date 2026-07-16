@@ -5,154 +5,81 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"image/png"
 	"log/slog"
-	"os/exec"
 	"regexp"
+	"strconv"
 	"strings"
-	"sync"
 
+	"github.com/gen2brain/go-fitz"
 	oai "github.com/sashabaranov/go-openai"
 )
 
-const maxImagesPerPage = 10
-
-const visionPrompt = `Describe ONLY the visual elements on this image: diagrams, charts, graphs, illustrations, tables with visual structure, and embedded photographs. Do NOT transcribe or repeat any text that appears — the text content is already captured separately. Focus exclusively on what the visual communicates that plain text cannot: spatial relationships, data trends, color coding, layout structure, and visual patterns.`
-
-// imgTagRe matches <img src="data:image/TYPE;base64,DATA"> tags in HTML.
-var imgTagRe = regexp.MustCompile(`<img\s[^>]*src="data:image/([a-zA-Z+]+);base64,([^"]+)"`)
-
-// pathTagRe matches <path ...> elements in SVG (both self-closing and non-self-closing).
-var pathTagRe = regexp.MustCompile(`<path\b[^>]*/?>`) 
-
-// fontIDRe matches path ids that are font glyphs (id="font_...").
-var fontIDRe = regexp.MustCompile(`\bid="font_`)
-
-var (
-	rsvgOnce      sync.Once
-	rsvgAvailFlag bool
+// minImageWidth and minImageHeight define the minimum pixel dimensions an embedded
+// image must have to be considered meaningful. Images smaller than both thresholds
+// (e.g. logos, spacers, icons) are ignored so that pages containing only decorative
+// elements are not sent to the Vision model.
+const (
+	minImageWidth  = 100
+	minImageHeight = 100
 )
 
-// rsvgAvailable returns true if rsvg-convert is found in PATH. Result is cached.
-func rsvgAvailable() bool {
-	rsvgOnce.Do(func() {
-		_, err := exec.LookPath("rsvg-convert")
-		rsvgAvailFlag = err == nil
-	})
-	return rsvgAvailFlag
-}
+const visionPrompt = `Describe ONLY the visual elements on this page: diagrams, charts, graphs, illustrations, tables with visual structure, and embedded photographs. Do NOT transcribe or repeat any text that appears — the text content is already captured separately. Focus exclusively on what the visuals communicate that plain text cannot: spatial relationships, data trends, color coding, layout structure, and visual patterns.`
 
-// extractRasterImages parses HTML output from go-fitz and returns decoded image bytes
-// for every <img src="data:image/TYPE;base64,..."> tag found.
-func extractRasterImages(html string) [][]byte {
-	matches := imgTagRe.FindAllStringSubmatch(html, -1)
-	var images [][]byte
-	for _, m := range matches {
-		// m[2] is the base64 payload; try multiple encodings for robustness
-		data := m[2]
-		decoded, err := base64.StdEncoding.DecodeString(data)
-		if err != nil {
-			// Some base64 in HTML may use URL-safe encoding
-			decoded, err = base64.URLEncoding.DecodeString(data)
-		}
-		if err != nil {
-			// Try raw (no padding) variants — some encoders omit or misalign padding
-			stripped := strings.TrimRight(data, "=")
-			decoded, err = base64.RawStdEncoding.DecodeString(stripped)
-			if err != nil {
-				decoded, err = base64.RawURLEncoding.DecodeString(stripped)
-			}
-		}
-		if err != nil {
-			slog.Default().Warn("failed to decode base64 image from PDF HTML", "error", err)
-			continue
-		}
-		images = append(images, decoded)
-	}
-	return images
-}
+// svgImageRe matches <image width="W" height="H" ...> elements in MuPDF SVG output.
+// MuPDF always emits width before height in its <image> tags.
+var svgImageRe = regexp.MustCompile(`<image\b[^>]*width="(\d+)"[^>]*height="(\d+)"`)
 
-// hasMeaningfulPaths returns true if the SVG contains <path> elements
-// that are NOT font glyphs (i.e. id does not start with "font_").
-// This distinguishes real vector graphics from MuPDF's text-glyph paths.
-func hasMeaningfulPaths(svg string) bool {
-	matches := pathTagRe.FindAllString(svg, -1)
-	for _, m := range matches {
-		if !fontIDRe.MatchString(m) {
+// pageHasMeaningfulImages reports whether the SVG output for a page contains at least
+// one embedded image whose pixel dimensions meet the minimum thresholds.
+// This is used to decide whether to render the whole page and send it to Vision.
+func pageHasMeaningfulImages(svg string) bool {
+	for _, m := range svgImageRe.FindAllStringSubmatch(svg, -1) {
+		w, _ := strconv.Atoi(m[1])
+		h, _ := strconv.Atoi(m[2])
+		if w >= minImageWidth && h >= minImageHeight {
 			return true
 		}
 	}
 	return false
 }
 
-// renderSVGWithBinary renders an SVG string to PNG bytes using the given binary path.
-// Returns (nil, nil) if the binary does not exist or is not executable.
-// Returns (nil, err) only on unexpected execution errors.
-func renderSVGWithBinary(binary, svg string, dpi float64) ([]byte, error) {
-	_, err := exec.LookPath(binary)
+// renderPageAsPNG renders a single PDF page to a PNG-encoded byte slice using MuPDF.
+// dpi controls the output resolution (150 is a good balance for Vision models).
+func renderPageAsPNG(doc *fitz.Document, pageNum int, dpi float64) ([]byte, error) {
+	img, err := doc.ImageDPI(pageNum, dpi)
 	if err != nil {
-		return nil, nil // binary not available — skip silently
+		return nil, fmt.Errorf("render page %d: %w", pageNum, err)
 	}
-	cmd := exec.Command(binary,
-		"--format", "png",
-		"--dpi-x", fmt.Sprintf("%.0f", dpi),
-		"--dpi-y", fmt.Sprintf("%.0f", dpi),
-		"-",
-	)
-	cmd.Stdin = strings.NewReader(svg)
-	var out bytes.Buffer
-	var stderr bytes.Buffer
-	cmd.Stdout = &out
-	cmd.Stderr = &stderr
-	if err := cmd.Run(); err != nil {
-		return nil, fmt.Errorf("rsvg-convert: %w (stderr: %s)", err, stderr.String())
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, img); err != nil {
+		return nil, fmt.Errorf("encode page %d as PNG: %w", pageNum, err)
 	}
-	return out.Bytes(), nil
+	return buf.Bytes(), nil
 }
 
-// renderSVG renders an SVG string to PNG using rsvg-convert.
-// Returns (nil, nil) if rsvg-convert is not available.
-func renderSVG(svg string, dpi float64) ([]byte, error) {
-	if !rsvgAvailable() {
-		return nil, nil
-	}
-	return renderSVGWithBinary("rsvg-convert", svg, dpi)
-}
-
-// describeVisuals sends up to maxImagesPerPage PNG/JPEG images to GPT-4o Vision
-// and returns a plain-text description of the visual content.
-// Images must be raw PNG or JPEG bytes.
-func describeVisuals(ctx context.Context, client *oai.Client, model string, images [][]byte) (string, error) {
-	if len(images) == 0 {
+// describeVisuals sends a single rendered page image to the Vision model and returns
+// a plain-text description of the visual content on that page.
+func describeVisuals(ctx context.Context, client *oai.Client, model string, pageImage []byte) (string, error) {
+	if len(pageImage) == 0 {
 		return "", nil
 	}
-	// Cap at maxImagesPerPage to control cost
-	if len(images) > maxImagesPerPage {
-		slog.Default().Warn("truncating images sent to vision model", "total", len(images), "limit", maxImagesPerPage)
-		images = images[:maxImagesPerPage]
-	}
 
-	// Build multi-part message: one image_url part per image
+	encoded := base64.StdEncoding.EncodeToString(pageImage)
+	dataURL := fmt.Sprintf("data:image/png;base64,%s", encoded)
+
 	parts := []oai.ChatMessagePart{
 		{
 			Type: oai.ChatMessagePartTypeText,
 			Text: visionPrompt,
 		},
-	}
-	for _, imgBytes := range images {
-		// Detect MIME type from magic bytes
-		mime := "image/png"
-		if len(imgBytes) >= 2 && imgBytes[0] == 0xFF && imgBytes[1] == 0xD8 {
-			mime = "image/jpeg"
-		}
-		encoded := base64.StdEncoding.EncodeToString(imgBytes)
-		dataURL := fmt.Sprintf("data:%s;base64,%s", mime, encoded)
-		parts = append(parts, oai.ChatMessagePart{
+		{
 			Type: oai.ChatMessagePartTypeImageURL,
 			ImageURL: &oai.ChatMessageImageURL{
 				URL:    dataURL,
 				Detail: oai.ImageURLDetailHigh,
 			},
-		})
+		},
 	}
 
 	resp, err := client.CreateChatCompletion(ctx, oai.ChatCompletionRequest{
@@ -173,3 +100,6 @@ func describeVisuals(ctx context.Context, client *oai.Client, model string, imag
 	}
 	return strings.TrimSpace(resp.Choices[0].Message.Content), nil
 }
+
+// Ensure slog is used (imported for Warn calls in pdf.go that share this package).
+var _ = slog.Default

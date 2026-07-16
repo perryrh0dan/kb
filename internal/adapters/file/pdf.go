@@ -14,9 +14,10 @@ import (
 var errNoContent = errors.New("pdf contains no extractable content")
 
 // extractPDFContent extracts text from all pages of a PDF.
-// If opts.Vision is non-nil and VisionConfig.Enabled is true, it also extracts
-// visual elements per page (embedded images + SVG vector graphics) and appends
-// a GPT-4o Vision description to each page's text.
+// If opts.Vision is non-nil and VisionConfig.Enabled is true, pages that contain
+// at least one embedded image meeting the minimum size threshold are rendered as a
+// full-page PNG and sent to GPT-4o Vision. The visual description is appended to
+// the page text before chunking.
 // Returns errNoContent if the PDF yields no content at all.
 func extractPDFContent(ctx context.Context, path string, opts Options) (string, error) {
 	log := slog.Default()
@@ -48,49 +49,30 @@ func extractPDFContent(ctx context.Context, path string, opts Options) (string, 
 			}
 		}
 
-		// --- Visual extraction + Vision ---
+		// --- Vision: render page if it contains meaningful images ---
 		if visionEnabled {
-			var pageImages [][]byte
-
-			// 1. Raster images from HTML
-			html, err := doc.HTML(n, false)
-			if err != nil {
-				log.Warn("failed to get HTML from pdf page", "path", path, "page", n, "error", err)
-			} else {
-				raster := extractRasterImages(html)
-				pageImages = append(pageImages, raster...)
-				log.Debug("extracted raster images from pdf page", "path", path, "page", n, "count", len(raster))
-			}
-
-			// 2. SVG vector graphics
 			svg, err := doc.SVG(n)
 			if err != nil {
 				log.Warn("failed to get SVG from pdf page", "path", path, "page", n, "error", err)
-			} else if hasMeaningfulPaths(svg) {
-				pngBytes, err := renderSVG(svg, opts.Vision.Config.DPI)
-				if err != nil {
-					log.Warn("failed to render SVG via rsvg-convert", "path", path, "page", n, "error", err)
-				} else if pngBytes != nil {
-					pageImages = append(pageImages, pngBytes)
-					log.Debug("rendered SVG vector graphics from pdf page", "path", path, "page", n)
-				} else {
-					log.Debug("rsvg-convert not available, skipping SVG for page", "path", path, "page", n)
-				}
-			}
+			} else if pageHasMeaningfulImages(svg) {
+				log.Debug("page has meaningful images, rendering for vision", "path", path, "page", n)
 
-			// 3. Vision API call
-			if len(pageImages) > 0 {
-				summary, err := describeVisuals(ctx, opts.Vision.Client, opts.Vision.Config.Model, pageImages)
+				pngBytes, err := renderPageAsPNG(doc, n, opts.Vision.Config.DPI)
 				if err != nil {
-					log.Warn("vision API failed for pdf page", "path", path, "page", n, "error", err)
-				} else if summary != "" {
-					if pageBuilder.Len() > 0 {
-						pageBuilder.WriteString("\n\n")
+					log.Warn("failed to render pdf page as PNG", "path", path, "page", n, "error", err)
+				} else {
+					summary, err := describeVisuals(ctx, opts.Vision.Client, opts.Vision.Config.Model, pngBytes)
+					if err != nil {
+						log.Warn("vision API failed for pdf page", "path", path, "page", n, "error", err)
+					} else if summary != "" {
+						if pageBuilder.Len() > 0 {
+							pageBuilder.WriteString("\n\n")
+						}
+						pageBuilder.WriteString("[Visual content: ")
+						pageBuilder.WriteString(summary)
+						pageBuilder.WriteString("]")
+						log.Debug("appended vision summary to pdf page", "path", path, "page", n)
 					}
-					pageBuilder.WriteString("[Visual content: ")
-					pageBuilder.WriteString(summary)
-					pageBuilder.WriteString("]")
-					log.Debug("appended vision summary to pdf page", "path", path, "page", n)
 				}
 			}
 		}
