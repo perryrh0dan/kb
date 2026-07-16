@@ -1,13 +1,13 @@
 package main
 
 import (
-	"fmt"
 	"os"
+
+	"github.com/user/kb/internal/cmd"
 )
 
 func main() {
-	if err := rootCmd.Execute(); err != nil {
-		fmt.Fprintln(os.Stderr, err)
+	if err := cmd.Execute(); err != nil {
 		os.Exit(1)
 	}
 }

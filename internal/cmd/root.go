@@ -1,4 +1,4 @@
-package main
+package cmd
 
 import (
 	"fmt"
@@ -32,6 +32,11 @@ func init() {
 	rootCmd.AddCommand(serveCmd)
 	rootCmd.AddCommand(statusCmd)
 	rootCmd.AddCommand(configCmd)
+}
+
+// Execute is the entry point called from main.
+func Execute() error {
+	return rootCmd.Execute()
 }
 
 func initConfig() {
