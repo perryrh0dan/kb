@@ -17,20 +17,24 @@ type openAIEmbedder struct {
 	dims   int
 }
 
-// New creates an OpenAI embedder using the default OpenAI base URL.
-func New(embedCfg config.EmbedderConfig, oaiCfg config.OpenAIConfig) (*openAIEmbedder, error) {
-	return NewWithBaseURL(embedCfg, oaiCfg, "")
+// NewWithClient creates an embedder using an already-configured oai.Client.
+// This is the primary constructor used by the provider system.
+func NewWithClient(client *oai.Client, embedCfg config.EmbedderConfig) (*openAIEmbedder, error) {
+	return &openAIEmbedder{
+		client: client,
+		model:  oai.EmbeddingModel(embedCfg.Model),
+		dims:   3072,
+	}, nil
 }
 
-// NewWithBaseURL creates an OpenAI embedder with a custom base URL (for testing).
-func NewWithBaseURL(embedCfg config.EmbedderConfig, oaiCfg config.OpenAIConfig, baseURL string) (*openAIEmbedder, error) {
-	cfg := oai.DefaultConfig(oaiCfg.APIKey)
+// NewWithBaseURL creates an embedder with a custom base URL. Used in tests only.
+func NewWithBaseURL(embedCfg config.EmbedderConfig, apiKey string, baseURL string) (*openAIEmbedder, error) {
+	cfg := oai.DefaultConfig(apiKey)
 	if baseURL != "" {
 		cfg.BaseURL = baseURL
 	}
-	client := oai.NewClientWithConfig(cfg)
 	return &openAIEmbedder{
-		client: client,
+		client: oai.NewClientWithConfig(cfg),
 		model:  oai.EmbeddingModel(embedCfg.Model),
 		dims:   3072,
 	}, nil
@@ -55,7 +59,7 @@ func (e *openAIEmbedder) Embed(ctx context.Context, texts []string) ([][]float32
 		})
 		if err != nil {
 			log.Warn("embedding batch failed", "batch_start", i, "batch_end", end, "error", err)
-			return nil, fmt.Errorf("openai embed batch [%d:%d]: %w", i, end, err)
+			return nil, fmt.Errorf("embed batch [%d:%d]: %w", i, end, err)
 		}
 		for _, d := range resp.Data {
 			results = append(results, d.Embedding)

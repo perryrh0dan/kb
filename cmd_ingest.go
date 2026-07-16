@@ -5,7 +5,6 @@ import (
 	"os"
 	"strings"
 
-	oai "github.com/sashabaranov/go-openai"
 	"github.com/spf13/cobra"
 	"github.com/user/kb/config"
 	"github.com/user/kb/internal/adapters/confluence"
@@ -13,6 +12,7 @@ import (
 	"github.com/user/kb/internal/chunker"
 	"github.com/user/kb/internal/embedder"
 	"github.com/user/kb/internal/ingest"
+	"github.com/user/kb/internal/provider"
 	"github.com/user/kb/internal/store"
 )
 
@@ -62,7 +62,7 @@ func newIngester(cfg *config.Config) (*ingest.Ingester, store.Store, error) {
 	if err != nil {
 		return nil, nil, fmt.Errorf("open store: %w", err)
 	}
-	emb, err := embedder.New(cfg.Embedder, cfg.OpenAI)
+	emb, err := embedder.New(cfg.Embedder, cfg.Providers)
 	if err != nil {
 		return nil, nil, fmt.Errorf("create embedder: %w", err)
 	}
@@ -70,18 +70,20 @@ func newIngester(cfg *config.Config) (*ingest.Ingester, store.Store, error) {
 	return ingest.New(st, c, emb), st, nil
 }
 
-func buildFileOptions(cfg *config.Config) file.Options {
+func buildFileOptions(cfg *config.Config) (file.Options, error) {
 	if !cfg.Vision.Enabled {
-		return file.Options{}
+		return file.Options{}, nil
 	}
-	oaiCfg := oai.DefaultConfig(cfg.OpenAI.APIKey)
-	client := oai.NewClientWithConfig(oaiCfg)
+	prov, err := provider.New(cfg.Vision.Provider, cfg.Providers)
+	if err != nil {
+		return file.Options{}, fmt.Errorf("vision provider: %w", err)
+	}
 	return file.Options{
 		Vision: &file.VisionOptions{
 			Config: cfg.Vision,
-			Client: client,
+			Client: prov.Client(),
 		},
-	}
+	}, nil
 }
 
 func runIngestAll(cmd *cobra.Command, args []string) error {
@@ -115,7 +117,11 @@ func runSource(cmd *cobra.Command, ing *ingest.Ingester, src config.SourceConfig
 				exts = src.Extensions
 			}
 		}
-		s := file.New(src.Path, src.Recursive, exts, buildFileOptions(cfg))
+		opts, err := buildFileOptions(cfg)
+		if err != nil {
+			return err
+		}
+		s := file.New(src.Path, src.Recursive, exts, opts)
 		stats, err := ing.Run(ctx, s, "file", force)
 		if err != nil {
 			return err
@@ -150,7 +156,11 @@ func runIngestFile(cmd *cobra.Command, args []string) error {
 	defer st.Close()
 
 	ctx := cmd.Context()
-	src := file.New(path, flagRecursive, exts, buildFileOptions(cfg))
+	opts, err := buildFileOptions(cfg)
+	if err != nil {
+		return err
+	}
+	src := file.New(path, flagRecursive, exts, opts)
 	stats, err := ing.Run(ctx, src, "file", flagFileForce)
 	if err != nil {
 		return err

@@ -37,7 +37,7 @@ func runSearch(cmd *cobra.Command, args []string) error {
 	}
 	defer st.Close()
 
-	emb, err := embedder.New(cfg.Embedder, cfg.OpenAI)
+	emb, err := embedder.New(cfg.Embedder, cfg.Providers)
 	if err != nil {
 		return fmt.Errorf("create embedder: %w", err)
 	}

@@ -13,7 +13,6 @@ import (
 )
 
 func TestEmbed(t *testing.T) {
-	// Mock OpenAI API
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		resp := map[string]interface{}{
 			"object": "list",
@@ -30,11 +29,11 @@ func TestEmbed(t *testing.T) {
 
 	emb, err := oaiemb.NewWithBaseURL(
 		config.EmbedderConfig{Provider: "openai", Model: "text-embedding-3-large"},
-		config.OpenAIConfig{APIKey: "sk-test"},
+		"sk-test",
 		srv.URL+"/v1",
 	)
 	if err != nil {
-		t.Fatalf("New: %v", err)
+		t.Fatalf("NewWithBaseURL: %v", err)
 	}
 
 	texts := []string{"hello world", "foo bar"}
@@ -51,11 +50,14 @@ func TestEmbed(t *testing.T) {
 }
 
 func TestDimensions(t *testing.T) {
-	emb, _ := oaiemb.NewWithBaseURL(
+	emb, err := oaiemb.NewWithBaseURL(
 		config.EmbedderConfig{Provider: "openai", Model: "text-embedding-3-large"},
-		config.OpenAIConfig{APIKey: "sk-test"},
+		"sk-test",
 		"http://localhost",
 	)
+	if err != nil {
+		t.Fatalf("NewWithBaseURL: %v", err)
+	}
 	if emb.Dimensions() != 3072 {
 		t.Errorf("Dimensions() = %d, want 3072", emb.Dimensions())
 	}
