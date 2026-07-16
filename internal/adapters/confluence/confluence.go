@@ -117,8 +117,12 @@ func (c *confluenceSource) Scan(ctx context.Context) (<-chan adapters.DocumentMe
 				resp.Body.Close()
 				return
 			}
-			body, _ := io.ReadAll(resp.Body)
+			body, readErr := io.ReadAll(resp.Body)
 			resp.Body.Close()
+			if readErr != nil {
+				log.Warn("confluence: failed to read response body", "url", url, "error", readErr)
+				return
+			}
 
 			var pr pagesMetaResponse
 			if c.pageID != "" {
@@ -174,8 +178,13 @@ func (c *confluenceSource) Scan(ctx context.Context) (<-chan adapters.DocumentMe
 func (c *confluenceSource) Load(ctx context.Context, meta adapters.DocumentMeta) (adapters.Document, error) {
 	log := slog.Default()
 	// Extract page ID from the document ID: "confluence://SPACE/PAGEID"
-	parts := strings.Split(meta.ID, "/")
-	pageID := parts[len(parts)-1]
+	const idPrefix = "confluence://"
+	tail := strings.TrimPrefix(meta.ID, idPrefix)
+	slashIdx := strings.LastIndex(tail, "/")
+	if slashIdx < 0 || slashIdx == len(tail)-1 {
+		return adapters.Document{}, fmt.Errorf("malformed confluence document ID: %q", meta.ID)
+	}
+	pageID := tail[slashIdx+1:]
 
 	url := fmt.Sprintf("%s/wiki/api/v2/pages/%s?body-format=storage", c.cfg.BaseURL, pageID)
 	resp, err := c.doRequest(ctx, url)
@@ -186,8 +195,11 @@ func (c *confluenceSource) Load(ctx context.Context, meta adapters.DocumentMeta)
 		resp.Body.Close()
 		return adapters.Document{}, fmt.Errorf("fetch page %s: HTTP %d", pageID, resp.StatusCode)
 	}
-	body, _ := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	resp.Body.Close()
+	if err != nil {
+		return adapters.Document{}, fmt.Errorf("read body for page %s: %w", pageID, err)
+	}
 
 	var page pageBody
 	if err := json.Unmarshal(body, &page); err != nil {

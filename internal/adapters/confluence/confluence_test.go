@@ -108,7 +108,11 @@ func TestConfluenceLoadReturnsContent(t *testing.T) {
 		t.Error("content should not be empty after Load")
 	}
 	if strings.Contains(doc.Content, "<") {
-		t.Errorf("HTML not stripped: %q", doc.Content[:20])
+		preview := doc.Content
+		if len(preview) > 20 {
+			preview = preview[:20]
+		}
+		t.Errorf("HTML not stripped: %q", preview)
 	}
 }
 
