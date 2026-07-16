@@ -31,6 +31,10 @@ type GenAIHubProviderConfig struct {
 	TenantID     string `mapstructure:"tenant_id"      yaml:"tenant_id"`
 	Scope        string `mapstructure:"scope"          yaml:"scope"`
 	APIVersion   string `mapstructure:"api_version"    yaml:"api_version"`
+
+	// TLS options — use when the hub endpoint uses a private/corporate CA.
+	TLSInsecureSkipVerify bool   `mapstructure:"tls_insecure_skip_verify" yaml:"tls_insecure_skip_verify,omitempty"`
+	TLSCACertFile         string `mapstructure:"tls_ca_cert_file"         yaml:"tls_ca_cert_file,omitempty"`
 }
 
 // ProvidersConfig holds configuration for all supported LLM/embedding providers.
@@ -117,8 +121,10 @@ func newViper() *viper.Viper {
 	v.BindEnv("providers.genai_hub.client_id",     "KB_GENAI_HUB_CLIENT_ID")      //nolint:errcheck
 	v.BindEnv("providers.genai_hub.client_secret", "KB_GENAI_HUB_CLIENT_SECRET")  //nolint:errcheck
 	v.BindEnv("providers.genai_hub.tenant_id",     "KB_GENAI_HUB_TENANT_ID")      //nolint:errcheck
-	v.BindEnv("providers.genai_hub.scope",         "KB_GENAI_HUB_SCOPE")          //nolint:errcheck
-	v.BindEnv("providers.genai_hub.api_version",   "KB_GENAI_HUB_API_VERSION")    //nolint:errcheck
+	v.BindEnv("providers.genai_hub.scope",                   "KB_GENAI_HUB_SCOPE")                    //nolint:errcheck
+	v.BindEnv("providers.genai_hub.api_version",             "KB_GENAI_HUB_API_VERSION")              //nolint:errcheck
+	v.BindEnv("providers.genai_hub.tls_insecure_skip_verify","KB_GENAI_HUB_TLS_INSECURE_SKIP_VERIFY") //nolint:errcheck
+	v.BindEnv("providers.genai_hub.tls_ca_cert_file",        "KB_GENAI_HUB_TLS_CA_CERT_FILE")         //nolint:errcheck
 
 	v.BindEnv("confluence.api_token",        "KB_CONFLUENCE_API_TOKEN")  //nolint:errcheck
 	v.BindEnv("confluence.pat",              "KB_CONFLUENCE_PAT")        //nolint:errcheck
@@ -202,6 +208,8 @@ providers:
     tenant_id: ""      # KB_GENAI_HUB_TENANT_ID
     scope: ""          # e.g. api://d6c63b5b-.../.default  (KB_GENAI_HUB_SCOPE)
     api_version: "2024-02-15-preview"  # KB_GENAI_HUB_API_VERSION
+    # tls_insecure_skip_verify: false  # set true to skip TLS cert validation (not for production)
+    # tls_ca_cert_file: ""             # path to PEM CA cert for private/corporate CAs (KB_GENAI_HUB_TLS_CA_CERT_FILE)
 
 confluence:
   base_url: ""

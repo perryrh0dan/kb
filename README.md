@@ -183,12 +183,15 @@ and also sends an `api-key` header. Configure via `~/.kb/config.yaml` or environ
 providers:
   genai_hub:
     endpoint: "https://api.genai-hub.example.com"
-    api_key: ""             # KB_GENAI_HUB_API_KEY
+    api_key: ""             # KB_GENAI_HUB_API_KEY (optional)
     client_id: ""           # KB_GENAI_HUB_CLIENT_ID
     client_secret: ""       # KB_GENAI_HUB_CLIENT_SECRET
     tenant_id: ""           # KB_GENAI_HUB_TENANT_ID
     scope: "api://d6c63b5b-.../.default"  # KB_GENAI_HUB_SCOPE
     api_version: "2024-02-15-preview"
+    # TLS options — use when the hub endpoint uses a private/corporate CA:
+    tls_insecure_skip_verify: false  # set true to skip TLS cert validation (not for production)
+    tls_ca_cert_file: ""             # path to PEM CA cert (KB_GENAI_HUB_TLS_CA_CERT_FILE)
 
 embedder:
   provider: genai_hub
@@ -204,6 +207,8 @@ embedder:
 | `KB_GENAI_HUB_TENANT_ID` | `providers.genai_hub.tenant_id` |
 | `KB_GENAI_HUB_SCOPE` | `providers.genai_hub.scope` |
 | `KB_GENAI_HUB_API_VERSION` | `providers.genai_hub.api_version` |
+| `KB_GENAI_HUB_TLS_INSECURE_SKIP_VERIFY` | `providers.genai_hub.tls_insecure_skip_verify` |
+| `KB_GENAI_HUB_TLS_CA_CERT_FILE` | `providers.genai_hub.tls_ca_cert_file` |
 
 All fields can also be set via the environment variables listed in the table above.
 

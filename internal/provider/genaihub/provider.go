@@ -2,8 +2,12 @@ package genaihub
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"fmt"
+	"log/slog"
 	"net/http"
+	"os"
 
 	oai "github.com/sashabaranov/go-openai"
 	"golang.org/x/oauth2/clientcredentials"
@@ -46,7 +50,26 @@ func New(cfg config.GenAIHubProviderConfig) (*genAIHubProvider, error) {
 	}
 	tokenSource := ccCfg.TokenSource(context.Background())
 
-	transport := NewTokenTransport(tokenSource, cfg.APIKey, nil)
+	// Build TLS configuration.
+	tlsCfg := &tls.Config{}
+	if cfg.TLSInsecureSkipVerify {
+		slog.Warn("genai_hub: TLS certificate verification disabled — do not use in production")
+		tlsCfg.InsecureSkipVerify = true //nolint:gosec
+	}
+	if cfg.TLSCACertFile != "" {
+		pem, err := os.ReadFile(cfg.TLSCACertFile)
+		if err != nil {
+			return nil, fmt.Errorf("genai_hub: read tls_ca_cert_file %q: %w", cfg.TLSCACertFile, err)
+		}
+		pool := x509.NewCertPool()
+		if !pool.AppendCertsFromPEM(pem) {
+			return nil, fmt.Errorf("genai_hub: no valid PEM certificates found in %q", cfg.TLSCACertFile)
+		}
+		tlsCfg.RootCAs = pool
+	}
+	inner := &http.Transport{TLSClientConfig: tlsCfg}
+
+	transport := NewTokenTransport(tokenSource, cfg.APIKey, inner)
 
 	oaiCfg := oai.DefaultConfig("")
 	oaiCfg.BaseURL = cfg.Endpoint
