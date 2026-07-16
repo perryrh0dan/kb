@@ -32,6 +32,10 @@ type Store interface {
 	// Use the source's ScopePrefix() as the prefix to limit pruning to that scope.
 	GetAllDocumentIDs(ctx context.Context, idPrefix string) ([]string, error)
 
+	// ListDocuments returns metadata for all documents whose ID starts with idPrefix.
+	// Pass an empty prefix to list everything.
+	ListDocuments(ctx context.Context, idPrefix string) ([]adapters.DocumentMeta, error)
+
 	// Chunk operations
 	SaveChunks(ctx context.Context, chunks []Chunk) error
 	DeleteChunks(ctx context.Context, documentID string) error

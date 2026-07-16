@@ -146,6 +146,52 @@ func (s *Server) Run(ctx context.Context) error {
 		}, nil, nil
 	})
 
+	// Tool: list_documents
+	mcp.AddTool(srv, &mcp.Tool{
+		Name: "list_documents",
+		Description: "List documents in the knowledge base. " +
+			"Filter by source_type ('file' or 'confluence') and source " +
+			"(folder path for files, space key for Confluence). " +
+			"Omit both to list everything.",
+		InputSchema: json.RawMessage(`{
+			"type": "object",
+			"properties": {
+				"source_type": {"type": "string", "description": "Filter by source type: file|confluence"},
+				"source":      {"type": "string", "description": "Space key (e.g. PublicCloud) or folder path (e.g. /docs)"}
+			}
+		}`),
+	}, func(ctx context.Context, req *mcp.CallToolRequest, args listDocsArgs) (*mcp.CallToolResult, any, error) {
+		log.Debug("tool called: list_documents", "source_type", args.SourceType, "source", args.Source)
+
+		prefix := buildDocPrefix(args.SourceType, args.Source)
+
+		docs, err := s.store.ListDocuments(ctx, prefix)
+		if err != nil {
+			log.Warn("store ListDocuments failed", "error", err)
+			return &mcp.CallToolResult{
+				Content: []mcp.Content{&mcp.TextContent{Text: fmt.Sprintf("list error: %v", err)}},
+				IsError: true,
+			}, nil, nil
+		}
+		if len(docs) == 0 {
+			return &mcp.CallToolResult{
+				Content: []mcp.Content{&mcp.TextContent{Text: "[]"}},
+			}, nil, nil
+		}
+		b, err := json.Marshal(docs)
+		if err != nil {
+			log.Error("json.Marshal failed for document list", "error", err)
+			return &mcp.CallToolResult{
+				Content: []mcp.Content{&mcp.TextContent{Text: fmt.Sprintf("marshal error: %v", err)}},
+				IsError: true,
+			}, nil, nil
+		}
+		log.Debug("list_documents returned results", "count", len(docs))
+		return &mcp.CallToolResult{
+			Content: []mcp.Content{&mcp.TextContent{Text: string(b)}},
+		}, nil, nil
+	})
+
 	return srv.Run(ctx, &mcp.StdioTransport{})
 }
 
@@ -158,4 +204,38 @@ type searchArgs struct {
 
 type getDocArgs struct {
 	DocumentID string `json:"document_id"`
+}
+
+type listDocsArgs struct {
+	SourceType string `json:"source_type"`
+	Source     string `json:"source"`
+}
+
+// buildDocPrefix converts source_type + source into a document ID prefix
+// suitable for ListDocuments. Examples:
+//
+//	("confluence", "PublicCloud") → "confluence://PublicCloud/"
+//	("file", "/root/workspace/kb/docs") → "file:///root/workspace/kb/docs/"
+//	("file", "") → "file://"
+//	("", "") → ""
+func buildDocPrefix(sourceType, source string) string {
+	switch sourceType {
+	case "confluence":
+		if source == "" {
+			return "confluence://"
+		}
+		return "confluence://" + source + "/"
+	case "file":
+		if source == "" {
+			return "file://"
+		}
+		// Ensure trailing slash so we don't match /docs2 when filtering /docs
+		p := source
+		if len(p) > 0 && p[len(p)-1] != '/' {
+			p += "/"
+		}
+		return "file://" + p
+	default:
+		return ""
+	}
 }

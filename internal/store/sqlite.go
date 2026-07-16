@@ -109,6 +109,32 @@ func (s *sqliteStore) GetAllDocumentIDs(ctx context.Context, idPrefix string) ([
 	return ids, rows.Err()
 }
 
+func (s *sqliteStore) ListDocuments(ctx context.Context, idPrefix string) ([]adapters.DocumentMeta, error) {
+	escaped := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(idPrefix)
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id, title, source_type, metadata, ingested_at
+		   FROM documents
+		  WHERE id LIKE ? ESCAPE '\'
+		  ORDER BY source_type, id`,
+		escaped+"%")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var docs []adapters.DocumentMeta
+	for rows.Next() {
+		var doc adapters.DocumentMeta
+		var metaJSON, ingestedAt string
+		if err := rows.Scan(&doc.ID, &doc.Title, &doc.SourceType, &metaJSON, &ingestedAt); err != nil {
+			return nil, err
+		}
+		doc.IngestedAt, _ = time.Parse(time.RFC3339, ingestedAt)
+		json.Unmarshal([]byte(metaJSON), &doc.Metadata) //nolint:errcheck
+		docs = append(docs, doc)
+	}
+	return docs, rows.Err()
+}
+
 func (s *sqliteStore) SaveChunks(ctx context.Context, chunks []Chunk) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
