@@ -135,6 +135,31 @@ func (s *sqliteStore) ListDocuments(ctx context.Context, idPrefix string) ([]ada
 	return docs, rows.Err()
 }
 
+func (s *sqliteStore) GetOrphanedDocuments(ctx context.Context) ([]adapters.DocumentMeta, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT d.id, d.title, d.source_type, d.metadata, d.ingested_at
+		   FROM documents d
+		   LEFT JOIN chunks c ON c.document_id = d.id
+		  WHERE c.id IS NULL
+		  ORDER BY d.source_type, d.id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var docs []adapters.DocumentMeta
+	for rows.Next() {
+		var doc adapters.DocumentMeta
+		var metaJSON, ingestedAt string
+		if err := rows.Scan(&doc.ID, &doc.Title, &doc.SourceType, &metaJSON, &ingestedAt); err != nil {
+			return nil, err
+		}
+		doc.IngestedAt, _ = time.Parse(time.RFC3339, ingestedAt)
+		json.Unmarshal([]byte(metaJSON), &doc.Metadata) //nolint:errcheck
+		docs = append(docs, doc)
+	}
+	return docs, rows.Err()
+}
+
 func (s *sqliteStore) SaveChunks(ctx context.Context, chunks []Chunk) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {

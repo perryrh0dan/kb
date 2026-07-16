@@ -36,6 +36,11 @@ type Store interface {
 	// Pass an empty prefix to list everything.
 	ListDocuments(ctx context.Context, idPrefix string) ([]adapters.DocumentMeta, error)
 
+	// GetOrphanedDocuments returns metadata for documents that have no chunks.
+	// These are documents whose hash was written but embedding failed, leaving
+	// them permanently skipped on subsequent ingest runs without --force.
+	GetOrphanedDocuments(ctx context.Context) ([]adapters.DocumentMeta, error)
+
 	// Chunk operations
 	SaveChunks(ctx context.Context, chunks []Chunk) error
 	DeleteChunks(ctx context.Context, documentID string) error

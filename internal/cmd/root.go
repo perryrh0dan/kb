@@ -32,6 +32,7 @@ func init() {
 	rootCmd.AddCommand(serveCmd)
 	rootCmd.AddCommand(statusCmd)
 	rootCmd.AddCommand(configCmd)
+	rootCmd.AddCommand(repairCmd)
 }
 
 // Execute is the entry point called from main.

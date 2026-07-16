@@ -209,3 +209,110 @@ func (ing *Ingester) RunWithProgress(ctx context.Context, src adapters.Source, s
 
 	return stats, nil
 }
+
+// RepairDocuments re-ingests a pre-supplied list of documents from src.
+// Unlike Run, it skips the Scan phase and always forces re-embedding.
+// Use this to recover documents that are in the store but have no chunks.
+func (ing *Ingester) RepairDocuments(
+	ctx context.Context,
+	docs []adapters.DocumentMeta,
+	src adapters.Source,
+	progress ProgressFunc,
+) (IngestStats, error) {
+	log := slog.Default()
+	var stats IngestStats
+	var total int
+
+	emit := func(action ProgressAction, title string) {
+		if progress != nil {
+			progress(ProgressEvent{Action: action, Title: title, Total: total})
+		}
+	}
+
+	for _, meta := range docs {
+		if ctx.Err() != nil {
+			break
+		}
+
+		doc, err := src.Load(ctx, meta)
+		if err != nil {
+			log.Warn("repair: load failed", "id", meta.ID, "error", err)
+			stats.Errors++
+			total++
+			emit(ActionError, meta.Title)
+			continue
+		}
+
+		chunks, err := ing.chunker.Split(doc.Content)
+		if err != nil {
+			log.Warn("repair: chunker failed", "id", doc.ID, "error", err)
+			stats.Errors++
+			total++
+			emit(ActionError, doc.Title)
+			continue
+		}
+		if len(chunks) == 0 {
+			if strings.TrimSpace(doc.Content) == "" {
+				log.Debug("repair: skipping document with empty content", "id", doc.ID)
+				stats.Skipped++
+				total++
+				emit(ActionSkipped, doc.Title)
+				continue
+			}
+			chunks = []string{doc.Content}
+		}
+
+		embeddings, err := ing.embedder.Embed(ctx, chunks)
+		if err != nil {
+			log.Warn("repair: embedding failed", "id", doc.ID, "chunks", len(chunks), "error", err)
+			stats.Errors++
+			total++
+			emit(ActionError, doc.Title)
+			continue
+		}
+
+		if err := ing.store.DeleteChunks(ctx, doc.ID); err != nil {
+			log.Warn("repair: failed to delete old chunks", "id", doc.ID, "error", err)
+			stats.Errors++
+			total++
+			emit(ActionError, doc.Title)
+			continue
+		}
+
+		if err := ing.store.UpsertDocument(ctx, doc); err != nil {
+			log.Warn("repair: failed to upsert document", "id", doc.ID, "error", err)
+			stats.Errors++
+			total++
+			emit(ActionError, doc.Title)
+			continue
+		}
+
+		var storeChunks []store.Chunk
+		for i, text := range chunks {
+			if embeddings[i] == nil {
+				continue
+			}
+			storeChunks = append(storeChunks, store.Chunk{
+				ID:         uuid.New().String(),
+				DocumentID: doc.ID,
+				Content:    text,
+				ChunkIndex: i,
+				Embedding:  embeddings[i],
+			})
+		}
+		if err := ing.store.SaveChunks(ctx, storeChunks); err != nil {
+			log.Warn("repair: failed to save chunks", "id", doc.ID, "error", err)
+			stats.Errors++
+			total++
+			emit(ActionError, doc.Title)
+			continue
+		}
+
+		log.Info("repair: document repaired", "id", doc.ID, "chunks", len(storeChunks))
+		stats.Ingested++
+		total++
+		emit(ActionIngested, doc.Title)
+	}
+
+	return stats, nil
+}
