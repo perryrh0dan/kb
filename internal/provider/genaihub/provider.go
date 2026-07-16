@@ -71,8 +71,17 @@ func New(cfg config.GenAIHubProviderConfig) (*genAIHubProvider, error) {
 
 	transport := NewTokenTransport(tokenSource, cfg.APIKey, inner)
 
-	oaiCfg := oai.DefaultConfig("")
-	oaiCfg.BaseURL = cfg.Endpoint
+	apiVersion := cfg.APIVersion
+	if apiVersion == "" {
+		apiVersion = "2024-02-15-preview"
+	}
+
+	// Use Azure-style config so go-openai routes to the correct deployment path:
+	// /openai/deployments/{model}/embeddings?api-version=...
+	// The empty string as apiKey avoids go-openai adding its own api-key header
+	// (our tokenTransport already injects it from cfg.APIKey).
+	oaiCfg := oai.DefaultAzureConfig("", cfg.Endpoint)
+	oaiCfg.APIVersion = apiVersion
 	oaiCfg.HTTPClient = &http.Client{Transport: transport}
 
 	return &genAIHubProvider{client: oai.NewClientWithConfig(oaiCfg)}, nil
