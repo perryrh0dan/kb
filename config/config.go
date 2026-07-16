@@ -21,10 +21,23 @@ type AzureProviderConfig struct {
 	APIVersion string `mapstructure:"api_version" yaml:"api_version"`
 }
 
+// GenAIHubProviderConfig holds credentials for the KFW GenAI Hub gateway.
+// Authentication uses OAuth2 client credentials (Azure AD) plus an API key header.
+type GenAIHubProviderConfig struct {
+	Endpoint     string `mapstructure:"endpoint"       yaml:"endpoint"`
+	APIKey       string `mapstructure:"api_key"        yaml:"api_key"`
+	ClientID     string `mapstructure:"client_id"      yaml:"client_id"`
+	ClientSecret string `mapstructure:"client_secret"  yaml:"client_secret"`
+	TenantID     string `mapstructure:"tenant_id"      yaml:"tenant_id"`
+	Scope        string `mapstructure:"scope"          yaml:"scope"`
+	APIVersion   string `mapstructure:"api_version"    yaml:"api_version"`
+}
+
 // ProvidersConfig holds configuration for all supported LLM/embedding providers.
 type ProvidersConfig struct {
-	OpenAI ProviderConfig      `mapstructure:"openai" yaml:"openai"`
-	Azure  AzureProviderConfig `mapstructure:"azure"  yaml:"azure"`
+	OpenAI   ProviderConfig         `mapstructure:"openai"    yaml:"openai"`
+	Azure    AzureProviderConfig    `mapstructure:"azure"     yaml:"azure"`
+	GenAIHub GenAIHubProviderConfig `mapstructure:"genai_hub" yaml:"genai_hub"`
 }
 
 type ConfluenceConfig struct {
@@ -96,6 +109,17 @@ func newViper() *viper.Viper {
 	v.BindEnv("providers.azure.api_key",     "KB_AZURE_API_KEY")         //nolint:errcheck
 	v.BindEnv("providers.azure.base_url",    "KB_AZURE_BASE_URL")        //nolint:errcheck
 	v.BindEnv("providers.azure.api_version", "KB_AZURE_API_VERSION")     //nolint:errcheck
+
+	v.SetDefault("providers.genai_hub.api_version", "2024-02-15-preview")
+
+	v.BindEnv("providers.genai_hub.endpoint",      "KB_GENAI_HUB_ENDPOINT")       //nolint:errcheck
+	v.BindEnv("providers.genai_hub.api_key",       "KB_GENAI_HUB_API_KEY")        //nolint:errcheck
+	v.BindEnv("providers.genai_hub.client_id",     "KB_GENAI_HUB_CLIENT_ID")      //nolint:errcheck
+	v.BindEnv("providers.genai_hub.client_secret", "KB_GENAI_HUB_CLIENT_SECRET")  //nolint:errcheck
+	v.BindEnv("providers.genai_hub.tenant_id",     "KB_GENAI_HUB_TENANT_ID")      //nolint:errcheck
+	v.BindEnv("providers.genai_hub.scope",         "KB_GENAI_HUB_SCOPE")          //nolint:errcheck
+	v.BindEnv("providers.genai_hub.api_version",   "KB_GENAI_HUB_API_VERSION")    //nolint:errcheck
+
 	v.BindEnv("confluence.api_token",        "KB_CONFLUENCE_API_TOKEN")  //nolint:errcheck
 	v.BindEnv("confluence.pat",              "KB_CONFLUENCE_PAT")        //nolint:errcheck
 	v.BindEnv("db.path",                     "KB_DB_PATH")               //nolint:errcheck
@@ -169,6 +193,15 @@ providers:
     api_key: ""  # or set KB_AZURE_API_KEY env var
     base_url: "" # e.g. https://my-resource.openai.azure.com/
     api_version: "2024-02-15-preview"  # or set KB_AZURE_API_VERSION
+
+  genai_hub:      # optional — KFW GenAI Hub gateway (OAuth2 + API key)
+    endpoint: ""       # e.g. https://api.genai-hub.example.com  (KB_GENAI_HUB_ENDPOINT)
+    api_key: ""        # KB_GENAI_HUB_API_KEY
+    client_id: ""      # KB_GENAI_HUB_CLIENT_ID
+    client_secret: ""  # KB_GENAI_HUB_CLIENT_SECRET
+    tenant_id: ""      # KB_GENAI_HUB_TENANT_ID
+    scope: ""          # e.g. api://d6c63b5b-.../.default  (KB_GENAI_HUB_SCOPE)
+    api_version: "2024-02-15-preview"  # KB_GENAI_HUB_API_VERSION
 
 confluence:
   base_url: ""
