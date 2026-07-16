@@ -24,7 +24,13 @@ const (
 	minImageHeight = 100
 )
 
-const visionPrompt = `Describe ONLY the visual elements on this page: diagrams, charts, graphs, illustrations, tables with visual structure, and embedded photographs. Do NOT transcribe or repeat any text that appears — the text content is already captured separately. Focus exclusively on what the visuals communicate that plain text cannot: spatial relationships, data trends, color coding, layout structure, and visual patterns.`
+const visionPrompt = `Describe the visual elements on this page: diagrams, charts, graphs, illustrations, tables, and embedded photographs or product images.
+
+Include text that is an integral part of visual elements — such as product names, model numbers, brand names, labels on charts or diagrams, table headers, legends, and captions beneath images. These are visual identifiers that cannot be inferred from surrounding body text alone.
+
+Do NOT transcribe running paragraph text or body copy that forms the main written content of the page — that is already captured separately.
+
+Focus on: what products or items are shown and their names/identifiers, what data or relationships are visualised, and any labels, legends or annotations that give meaning to the visuals.`
 
 // svgImageRe matches <image width="W" height="H" ...> elements in MuPDF SVG output.
 // MuPDF always emits width before height in its <image> tags.
