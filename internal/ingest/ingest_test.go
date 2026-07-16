@@ -234,5 +234,55 @@ func TestIngestZeroChunkFallback(t *testing.T) {
 	}
 }
 
+// trackingSource wraps stubSource and counts Load() calls.
+type trackingSource struct {
+	*stubSource
+	loadCalls int
+}
+
+func (ts *trackingSource) Scan(ctx context.Context) (<-chan adapters.DocumentMeta, error) {
+	return ts.stubSource.Scan(ctx)
+}
+
+func (ts *trackingSource) Load(ctx context.Context, meta adapters.DocumentMeta) (adapters.Document, error) {
+	ts.loadCalls++
+	return ts.stubSource.Load(ctx, meta)
+}
+
+func (ts *trackingSource) ScopePrefix() string {
+	return ts.stubSource.ScopePrefix()
+}
+
+func TestIngestLoadNotCalledOnSkip(t *testing.T) {
+	st, err := store.NewSQLite(t.TempDir() + "/test.db")
+	if err != nil {
+		t.Fatalf("NewSQLite: %v", err)
+	}
+	defer st.Close()
+
+	c := chunker.New(512, 50)
+	emb := &stubEmbedder{dims: 3072}
+	ing := ingest.New(st, c, emb)
+	doc := makeDoc("file:///a.md", "hello world")
+
+	// First ingest — populates DB
+	if _, err := ing.Run(context.Background(), &stubSource{docs: []adapters.Document{doc}}, "file", false); err != nil {
+		t.Fatalf("first Run: %v", err)
+	}
+
+	// Second ingest with same content — Load() must NOT be called
+	ts := &trackingSource{stubSource: &stubSource{docs: []adapters.Document{doc}}}
+	stats, err := ing.Run(context.Background(), ts, "file", false)
+	if err != nil {
+		t.Fatalf("second Run: %v", err)
+	}
+	if stats.Skipped != 1 {
+		t.Errorf("skipped = %d, want 1", stats.Skipped)
+	}
+	if ts.loadCalls != 0 {
+		t.Errorf("Load() called %d times on unchanged document, want 0", ts.loadCalls)
+	}
+}
+
 // Ensure the stubEmbedder satisfies the embedder.Embedder interface at compile time.
 var _ embedder.Embedder = (*stubEmbedder)(nil)
