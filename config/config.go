@@ -33,7 +33,7 @@ type GenAIHubProviderConfig struct {
 	APIVersion   string `mapstructure:"api_version"    yaml:"api_version"`
 
 	// TLS options — use when the hub endpoint uses a private/corporate CA.
-	TLSInsecureSkipVerify bool   `mapstructure:"tls_insecure_skip_verify" yaml:"tls_insecure_skip_verify,omitempty"`
+	TLSInsecureSkipVerify bool   `mapstructure:"tls_insecure_skip_verify" yaml:"tls_insecure_skip_verify"`
 	TLSCACertFile         string `mapstructure:"tls_ca_cert_file"         yaml:"tls_ca_cert_file,omitempty"`
 }
 
