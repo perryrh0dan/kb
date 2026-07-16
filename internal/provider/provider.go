@@ -17,12 +17,12 @@ type Provider interface {
 	// in how the client was configured (DefaultConfig vs DefaultAzureConfig).
 	Client() *oai.Client
 
-	// Name returns the provider identifier: "openai" or "azure".
+	// Name returns the provider identifier: "openai", "azure", or "genai_hub".
 	Name() string
 }
 
 // New creates a Provider for the given name using the credentials in cfg.
-// name must be "openai" or "azure". An empty or unrecognised name defaults to "openai".
+// name must be "openai", "azure", or "genai_hub". An empty or unrecognised name defaults to "openai".
 func New(name string, cfg config.ProvidersConfig) (Provider, error) {
 	switch name {
 	case "azure":

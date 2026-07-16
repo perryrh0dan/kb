@@ -174,6 +174,29 @@ sources: []
 
 Sources are automatically registered when you run `kb ingest file` or `kb ingest confluence` and stored in the config for subsequent incremental syncs.
 
+## GenAI Hub (KFW Azure OpenAI Gateway)
+
+The GenAI Hub provider authenticates using OAuth2 client credentials (Azure AD)
+and also sends an `api-key` header. Configure via `~/.kb/config.yaml` or environment variables:
+
+```yaml
+providers:
+  genai_hub:
+    endpoint: "https://api.genai-hub.example.com"
+    api_key: ""             # KB_GENAI_HUB_API_KEY
+    client_id: ""           # KB_GENAI_HUB_CLIENT_ID
+    client_secret: ""       # KB_GENAI_HUB_CLIENT_SECRET
+    tenant_id: ""           # KB_GENAI_HUB_TENANT_ID
+    scope: "api://d6c63b5b-.../.default"  # KB_GENAI_HUB_SCOPE
+    api_version: "2024-02-15-preview"
+
+embedder:
+  provider: genai_hub
+  model: text-embedding-3-large   # deployment name on the hub
+```
+
+All fields can also be set via environment variables (see table above).
+
 ## License
 
 MIT
