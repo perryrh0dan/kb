@@ -5,8 +5,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/spf13/cobra"
 	oai "github.com/sashabaranov/go-openai"
+	"github.com/spf13/cobra"
 	"github.com/user/kb/config"
 	"github.com/user/kb/internal/adapters/confluence"
 	"github.com/user/kb/internal/adapters/file"
