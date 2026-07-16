@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -141,12 +142,15 @@ func runSource(cmd *cobra.Command, ing *ingest.Ingester, src config.SourceConfig
 }
 
 func runIngestFile(cmd *cobra.Command, args []string) error {
-	path := args[0]
+	absPath, err := filepath.Abs(args[0])
+	if err != nil {
+		return fmt.Errorf("resolve path: %w", err)
+	}
 	exts := strings.Split(flagExt, ",")
 
-	// Register/update in config
+	// Register/update in config — always store absolute path
 	registerSource(config.SourceConfig{
-		Type: "file", Path: path, Recursive: flagRecursive, Extensions: exts,
+		Type: "file", Path: absPath, Recursive: flagRecursive, Extensions: exts,
 	})
 
 	ing, st, err := newIngester(cfg)
@@ -160,7 +164,7 @@ func runIngestFile(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	src := file.New(path, flagRecursive, exts, opts)
+	src := file.New(absPath, flagRecursive, exts, opts)
 	stats, err := ing.Run(ctx, src, "file", flagFileForce)
 	if err != nil {
 		return err
