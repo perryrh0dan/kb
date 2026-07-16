@@ -2,6 +2,7 @@ package confluence
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -34,11 +35,18 @@ type confluenceSource struct {
 // New creates a Confluence Source.
 // pageID is optional; if set, only that page is scanned/loaded.
 func New(cfg config.ConfluenceConfig, space, pageID string) adapters.Source {
+	transport := http.DefaultTransport
+	if cfg.TLSInsecureSkipVerify {
+		slog.Warn("confluence: TLS certificate verification disabled — do not use in production")
+		transport = &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec
+		}
+	}
 	return &confluenceSource{
 		cfg:    cfg,
 		space:  space,
 		pageID: pageID,
-		client: &http.Client{Timeout: 30 * time.Second},
+		client: &http.Client{Timeout: 30 * time.Second, Transport: transport},
 	}
 }
 
@@ -65,15 +73,25 @@ func (c *confluenceSource) doRequest(ctx context.Context, url string) (*http.Res
 }
 
 // pageMeta is used for Scan — no body, just identity and version info.
+// Handles both v1 (version.when) and v2 (version.createdAt) response shapes.
 type pageMeta struct {
 	ID      string `json:"id"`
 	Title   string `json:"title"`
 	Version struct {
-		CreatedAt string `json:"createdAt"`
+		CreatedAt string `json:"createdAt"` // v2
+		When      string `json:"when"`      // v1
 	} `json:"version"`
 	Links struct {
 		WebUI string `json:"webui"`
 	} `json:"_links"`
+}
+
+// versionTS returns whichever timestamp field is populated.
+func (p pageMeta) versionTS() string {
+	if p.Version.CreatedAt != "" {
+		return p.Version.CreatedAt
+	}
+	return p.Version.When
 }
 
 type pagesMetaResponse struct {
@@ -93,19 +111,51 @@ type pageBody struct {
 	} `json:"body"`
 }
 
+// isV1 returns true when the config requests the v1 REST API.
+func (c *confluenceSource) isV1() bool {
+	return c.cfg.APIVersion == "v1"
+}
+
+// scanURL returns the initial page-listing URL for Scan.
+func (c *confluenceSource) scanURL() string {
+	if c.pageID != "" {
+		if c.isV1() {
+			return fmt.Sprintf("%s/rest/api/content/%s?expand=version", c.cfg.BaseURL, c.pageID)
+		}
+		return fmt.Sprintf("%s/wiki/api/v2/pages/%s", c.cfg.BaseURL, c.pageID)
+	}
+	if c.isV1() {
+		return fmt.Sprintf("%s/rest/api/space/%s/content/page?limit=50&expand=version", c.cfg.BaseURL, c.space)
+	}
+	return fmt.Sprintf("%s/wiki/api/v2/spaces/%s/pages?limit=50", c.cfg.BaseURL, c.space)
+}
+
+// loadURL returns the URL to fetch a page body by ID.
+func (c *confluenceSource) loadURL(pageID string) string {
+	if c.isV1() {
+		return fmt.Sprintf("%s/rest/api/content/%s?expand=body.storage", c.cfg.BaseURL, pageID)
+	}
+	return fmt.Sprintf("%s/wiki/api/v2/pages/%s?body-format=storage", c.cfg.BaseURL, pageID)
+}
+
+// pageWebURL returns a browser-friendly URL for a page given its webui link fragment.
+func (c *confluenceSource) pageWebURL(webuiFragment string) string {
+	if c.isV1() {
+		// v1 webui links are already absolute paths like /spaces/SPACE/pages/123/Title
+		return c.cfg.BaseURL + webuiFragment
+	}
+	return c.cfg.BaseURL + "/wiki" + webuiFragment
+}
+
 // Scan fetches page metadata (no body) and streams DocumentMeta.
-// ContentHash is computed from pageID + ":" + version.createdAt —
+// ContentHash is computed from pageID + ":" + version timestamp —
 // deterministic and changes only when the page is actually updated.
 func (c *confluenceSource) Scan(ctx context.Context) (<-chan adapters.DocumentMeta, error) {
 	log := slog.Default()
 	ch := make(chan adapters.DocumentMeta)
 	go func() {
 		defer close(ch)
-		// For a single page, use the pages/{id} endpoint (no body-format needed for meta)
-		url := fmt.Sprintf("%s/wiki/api/v2/spaces/%s/pages?limit=50", c.cfg.BaseURL, c.space)
-		if c.pageID != "" {
-			url = fmt.Sprintf("%s/wiki/api/v2/pages/%s", c.cfg.BaseURL, c.pageID)
-		}
+		url := c.scanURL()
 		for url != "" {
 			resp, err := c.doRequest(ctx, url)
 			if err != nil {
@@ -140,19 +190,18 @@ func (c *confluenceSource) Scan(ctx context.Context) (<-chan adapters.DocumentMe
 			}
 
 			for _, page := range pr.Results {
+				ts := page.versionTS()
 				log.Debug("scanned confluence page", "id", page.ID, "title", page.Title)
-				// Hash from pageID + version timestamp — deterministic, no body needed
-				hashInput := page.ID + ":" + page.Version.CreatedAt
 				meta := adapters.DocumentMeta{
 					ID:          fmt.Sprintf("confluence://%s/%s", c.space, page.ID),
 					Title:       page.Title,
-					ContentHash: store.ContentHash(hashInput),
+					ContentHash: store.ContentHash(page.ID + ":" + ts),
 					SourceType:  "confluence",
 					Metadata: map[string]string{
-						"url":        c.cfg.BaseURL + "/wiki" + page.Links.WebUI,
+						"url":        c.pageWebURL(page.Links.WebUI),
 						"space":      c.space,
 						"page_id":    page.ID,
-						"updated_at": page.Version.CreatedAt,
+						"updated_at": ts,
 					},
 					IngestedAt: time.Now().UTC(),
 				}
@@ -186,7 +235,7 @@ func (c *confluenceSource) Load(ctx context.Context, meta adapters.DocumentMeta)
 	}
 	pageID := tail[slashIdx+1:]
 
-	url := fmt.Sprintf("%s/wiki/api/v2/pages/%s?body-format=storage", c.cfg.BaseURL, pageID)
+	url := c.loadURL(pageID)
 	resp, err := c.doRequest(ctx, url)
 	if err != nil {
 		return adapters.Document{}, fmt.Errorf("fetch page %s: %w", pageID, err)

@@ -45,10 +45,14 @@ type ProvidersConfig struct {
 }
 
 type ConfluenceConfig struct {
-	BaseURL  string `mapstructure:"base_url"  yaml:"base_url"`
-	Username string `mapstructure:"username"  yaml:"username"`
-	APIToken string `mapstructure:"api_token" yaml:"api_token"`
-	PAT      string `mapstructure:"pat"       yaml:"pat"`
+	BaseURL               string `mapstructure:"base_url"                 yaml:"base_url"`
+	Username              string `mapstructure:"username"                 yaml:"username"`
+	APIToken              string `mapstructure:"api_token"                yaml:"api_token"`
+	PAT                   string `mapstructure:"pat"                      yaml:"pat"`
+	TLSInsecureSkipVerify bool   `mapstructure:"tls_insecure_skip_verify" yaml:"tls_insecure_skip_verify"`
+	// APIVersion selects the Confluence REST API version: "v1" (Data Center /rest/api/)
+	// or "v2" (Cloud/modern DC, /wiki/api/v2/). Defaults to "v2".
+	APIVersion            string `mapstructure:"api_version"              yaml:"api_version,omitempty"`
 }
 
 type DBConfig struct {
@@ -128,6 +132,7 @@ func newViper() *viper.Viper {
 
 	v.BindEnv("confluence.api_token",        "KB_CONFLUENCE_API_TOKEN")  //nolint:errcheck
 	v.BindEnv("confluence.pat",              "KB_CONFLUENCE_PAT")        //nolint:errcheck
+	v.BindEnv("confluence.tls_insecure_skip_verify", "KB_CONFLUENCE_TLS_INSECURE_SKIP_VERIFY") //nolint:errcheck
 	v.BindEnv("db.path",                     "KB_DB_PATH")               //nolint:errcheck
 
 	return v
