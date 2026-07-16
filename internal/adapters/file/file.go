@@ -80,7 +80,17 @@ func (f *fileSource) Documents(ctx context.Context) (<-chan adapters.Document, e
 			if !f.extensions[ext] {
 				return nil
 			}
-			// Extract content — PDFs need text extraction, other formats are read as-is.
+			// Read raw file bytes first — used for the content hash.
+			// The hash is always computed over the original file bytes so it is
+			// deterministic and independent of non-deterministic outputs (e.g.
+			// GPT-4o Vision summaries that vary between runs).
+			rawBytes, err := os.ReadFile(p)
+			if err != nil {
+				log.Warn("failed to read file", "path", p, "error", err)
+				return nil
+			}
+
+			// Extract content — PDFs need text extraction and optional vision analysis.
 			var content string
 			if ext == "pdf" {
 				text, err := extractPDFContent(ctx, p, f.opts)
@@ -94,12 +104,7 @@ func (f *fileSource) Documents(ctx context.Context) (<-chan adapters.Document, e
 				}
 				content = text
 			} else {
-				raw, err := os.ReadFile(p)
-				if err != nil {
-					log.Warn("failed to read file", "path", p, "error", err)
-					return nil
-				}
-				content = string(raw)
+				content = string(rawBytes)
 			}
 			info, _ := d.Info()
 			modTime := time.Time{}
@@ -115,7 +120,7 @@ func (f *fileSource) Documents(ctx context.Context) (<-chan adapters.Document, e
 				ID:          "file://" + absPath,
 				Title:       filepath.Base(p),
 				Content:     content,
-				ContentHash: store.ContentHash(content),
+				ContentHash: store.ContentHash(string(rawBytes)),
 				SourceType:  "file",
 				Metadata: map[string]string{
 					"path":     absPath,
