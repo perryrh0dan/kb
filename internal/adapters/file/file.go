@@ -2,7 +2,7 @@ package file
 
 import (
 	"context"
-	"errors"
+	"fmt"
 	"io/fs"
 	"log/slog"
 	"os"
@@ -44,22 +44,23 @@ func New(path string, recursive bool, extensions []string, opts Options) adapter
 }
 
 // ScopePrefix returns the document ID prefix for this file source.
-// Only docs whose IDs start with this prefix are pruned during ingest.
 func (f *fileSource) ScopePrefix() string {
 	abs, err := filepath.Abs(f.path)
 	if err != nil {
 		abs = f.path
 	}
-	// Ensure trailing slash so "file:///docs/k8s/" doesn't match "file:///docs/k8s2/"
 	if len(abs) > 0 && abs[len(abs)-1] != '/' {
 		abs += "/"
 	}
 	return "file://" + abs
 }
 
-func (f *fileSource) Documents(ctx context.Context) (<-chan adapters.Document, error) {
+// Scan walks the source directory and streams DocumentMeta for each matching file.
+// It reads raw file bytes to compute the ContentHash but does NOT parse PDFs or
+// call Vision — those happen in Load() only when the hash has changed.
+func (f *fileSource) Scan(ctx context.Context) (<-chan adapters.DocumentMeta, error) {
 	log := slog.Default()
-	ch := make(chan adapters.Document)
+	ch := make(chan adapters.DocumentMeta)
 	go func() {
 		defer close(ch)
 		_ = filepath.WalkDir(f.path, func(p string, d fs.DirEntry, err error) error {
@@ -80,46 +81,28 @@ func (f *fileSource) Documents(ctx context.Context) (<-chan adapters.Document, e
 			if !f.extensions[ext] {
 				return nil
 			}
-			// Read raw file bytes first — used for the content hash.
-			// The hash is always computed over the original file bytes so it is
-			// deterministic and independent of non-deterministic outputs (e.g.
-			// GPT-4o Vision summaries that vary between runs).
+
 			rawBytes, err := os.ReadFile(p)
 			if err != nil {
 				log.Warn("failed to read file", "path", p, "error", err)
 				return nil
 			}
 
-			// Extract content — PDFs need text extraction and optional vision analysis.
-			var content string
-			if ext == "pdf" {
-				text, err := extractPDFContent(ctx, p, f.opts)
-				if err != nil {
-					if errors.Is(err, errNoContent) {
-						log.Warn("pdf has no extractable content, skipping", "path", p)
-					} else {
-						log.Warn("failed to extract pdf content", "path", p, "error", err)
-					}
-					return nil
-				}
-				content = text
-			} else {
-				content = string(rawBytes)
-			}
-			info, _ := d.Info()
-			modTime := time.Time{}
-			if info != nil {
-				modTime = info.ModTime()
-			}
 			absPath, err := filepath.Abs(p)
 			if err != nil {
 				log.Warn("failed to resolve absolute path", "path", p, "error", err)
 				return nil
 			}
-			doc := adapters.Document{
+
+			info, _ := d.Info()
+			modTime := time.Time{}
+			if info != nil {
+				modTime = info.ModTime()
+			}
+
+			meta := adapters.DocumentMeta{
 				ID:          "file://" + absPath,
 				Title:       filepath.Base(p),
-				Content:     content,
 				ContentHash: store.ContentHash(string(rawBytes)),
 				SourceType:  "file",
 				Metadata: map[string]string{
@@ -129,9 +112,9 @@ func (f *fileSource) Documents(ctx context.Context) (<-chan adapters.Document, e
 				},
 				IngestedAt: time.Now().UTC(),
 			}
-			log.Debug("found file", "path", absPath)
+			log.Debug("scanned file", "path", absPath)
 			select {
-			case ch <- doc:
+			case ch <- meta:
 			case <-ctx.Done():
 				return ctx.Err()
 			}
@@ -139,4 +122,36 @@ func (f *fileSource) Documents(ctx context.Context) (<-chan adapters.Document, e
 		})
 	}()
 	return ch, nil
+}
+
+// Load extracts the full content for the file identified by meta.
+// For PDFs this includes text extraction and optional Vision analysis.
+// This is the expensive operation — only called when the hash has changed.
+func (f *fileSource) Load(ctx context.Context, meta adapters.DocumentMeta) (adapters.Document, error) {
+	log := slog.Default()
+	absPath := strings.TrimPrefix(meta.ID, "file://")
+
+	rawBytes, err := os.ReadFile(absPath)
+	if err != nil {
+		return adapters.Document{}, fmt.Errorf("read file %s: %w", absPath, err)
+	}
+
+	ext := strings.ToLower(strings.TrimPrefix(filepath.Ext(absPath), "."))
+	var content string
+
+	if ext == "pdf" {
+		log.Debug("loading PDF with content extraction", "path", absPath)
+		text, err := extractPDFContent(ctx, absPath, f.opts)
+		if err != nil {
+			return adapters.Document{}, fmt.Errorf("extract pdf content %s: %w", absPath, err)
+		}
+		content = text
+	} else {
+		content = string(rawBytes)
+	}
+
+	return adapters.Document{
+		DocumentMeta: meta,
+		Content:      content,
+	}, nil
 }
