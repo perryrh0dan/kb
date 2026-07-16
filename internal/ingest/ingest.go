@@ -53,24 +53,31 @@ func (ing *Ingester) Run(ctx context.Context, src adapters.Source, sourceType st
 	}
 	seen := make(map[string]bool)
 
-	docCh, err := src.Documents(ctx)
+	metaCh, err := src.Scan(ctx)
 	if err != nil {
 		return stats, fmt.Errorf("open source: %w", err)
 	}
 
-	for doc := range docCh {
+	for meta := range metaCh {
 		if ctx.Err() != nil {
 			break
 		}
-		seen[doc.ID] = true
+		seen[meta.ID] = true
 
 		if !force {
-			existing, err := ing.store.GetDocument(ctx, doc.ID)
-			if err == nil && existing != nil && existing.ContentHash == doc.ContentHash {
-				log.Debug("document unchanged, skipping", "id", doc.ID)
+			existing, err := ing.store.GetDocument(ctx, meta.ID)
+			if err == nil && existing != nil && existing.ContentHash == meta.ContentHash {
+				log.Debug("document unchanged, skipping", "id", meta.ID)
 				stats.Skipped++
 				continue
 			}
+		}
+
+		doc, err := src.Load(ctx, meta)
+		if err != nil {
+			log.Warn("load failed", "id", meta.ID, "error", err)
+			stats.Errors++
+			continue
 		}
 
 		log.Debug("ingesting document", "id", doc.ID, "title", doc.Title)

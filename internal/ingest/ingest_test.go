@@ -13,19 +13,28 @@ import (
 	"github.com/user/kb/internal/store"
 )
 
-// stubSource emits a fixed list of documents.
+// stubSource emits a fixed list of documents via the two-phase Scan/Load interface.
 type stubSource struct {
 	docs   []adapters.Document
 	prefix string // scope prefix for pruning
 }
 
-func (s *stubSource) Documents(ctx context.Context) (<-chan adapters.Document, error) {
-	ch := make(chan adapters.Document, len(s.docs))
+func (s *stubSource) Scan(ctx context.Context) (<-chan adapters.DocumentMeta, error) {
+	ch := make(chan adapters.DocumentMeta, len(s.docs))
 	for _, d := range s.docs {
-		ch <- d
+		ch <- d.DocumentMeta
 	}
 	close(ch)
 	return ch, nil
+}
+
+func (s *stubSource) Load(ctx context.Context, meta adapters.DocumentMeta) (adapters.Document, error) {
+	for _, d := range s.docs {
+		if d.ID == meta.ID {
+			return d, nil
+		}
+	}
+	return adapters.Document{DocumentMeta: meta}, nil
 }
 
 func (s *stubSource) ScopePrefix() string {
@@ -50,11 +59,15 @@ func (e *stubEmbedder) ModelName() string { return "stub" }
 
 func makeDoc(id, content string) adapters.Document {
 	return adapters.Document{
-		ID: id, Title: id, Content: content,
-		ContentHash: store.ContentHash(content),
-		SourceType:  "file",
-		Metadata:    map[string]string{},
-		IngestedAt:  time.Now().UTC(),
+		DocumentMeta: adapters.DocumentMeta{
+			ID:          id,
+			Title:       id,
+			ContentHash: store.ContentHash(content),
+			SourceType:  "file",
+			Metadata:    map[string]string{},
+			IngestedAt:  time.Now().UTC(),
+		},
+		Content: content,
 	}
 }
 

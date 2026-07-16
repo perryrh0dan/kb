@@ -24,13 +24,15 @@ func TestUpsertAndGetDocument(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 	doc := adapters.Document{
-		ID:          "file:///tmp/test.md",
-		Title:       "Test Doc",
-		Content:     "hello world",
-		ContentHash: "abc123",
-		SourceType:  "file",
-		Metadata:    map[string]string{"path": "/tmp/test.md"},
-		IngestedAt:  time.Now().UTC(),
+		DocumentMeta: adapters.DocumentMeta{
+			ID:          "file:///tmp/test.md",
+			Title:       "Test Doc",
+			ContentHash: "abc123",
+			SourceType:  "file",
+			Metadata:    map[string]string{"path": "/tmp/test.md"},
+			IngestedAt:  time.Now().UTC(),
+		},
+		Content: "hello world",
 	}
 	if err := s.UpsertDocument(ctx, doc); err != nil {
 		t.Fatalf("UpsertDocument: %v", err)
@@ -62,9 +64,15 @@ func TestDeleteDocumentCascadesToChunks(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 	doc := adapters.Document{
-		ID: "file:///tmp/cascade.md", Title: "Cascade", Content: "x",
-		ContentHash: "h1", SourceType: "file",
-		Metadata: map[string]string{}, IngestedAt: time.Now().UTC(),
+		DocumentMeta: adapters.DocumentMeta{
+			ID:          "file:///tmp/cascade.md",
+			Title:       "Cascade",
+			ContentHash: "h1",
+			SourceType:  "file",
+			Metadata:    map[string]string{},
+			IngestedAt:  time.Now().UTC(),
+		},
+		Content: "x",
 	}
 	_ = s.UpsertDocument(ctx, doc)
 	chunk := store.Chunk{
@@ -100,8 +108,15 @@ func TestGetAllDocumentIDs(t *testing.T) {
 			src = "confluence"
 		}
 		_ = s.UpsertDocument(ctx, adapters.Document{
-			ID: id, Title: id, Content: "x", ContentHash: "h",
-			SourceType: src, Metadata: map[string]string{}, IngestedAt: time.Now().UTC(),
+			DocumentMeta: adapters.DocumentMeta{
+				ID:         id,
+				Title:      id,
+				ContentHash: "h",
+				SourceType: src,
+				Metadata:   map[string]string{},
+				IngestedAt: time.Now().UTC(),
+			},
+			Content: "x",
 		})
 	}
 	// Prefix-based: "file:///" matches all file docs
