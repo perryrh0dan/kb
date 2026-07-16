@@ -83,12 +83,12 @@ func (f *fileSource) Documents(ctx context.Context) (<-chan adapters.Document, e
 			// Extract content — PDFs need text extraction, other formats are read as-is.
 			var content string
 			if ext == "pdf" {
-				text, err := extractPDFText(p)
+				text, err := extractPDFContent(ctx, p, f.opts)
 				if err != nil {
-					if errors.Is(err, errNoText) {
-						log.Warn("pdf has no extractable text, skipping", "path", p)
+					if errors.Is(err, errNoContent) {
+						log.Warn("pdf has no extractable content, skipping", "path", p)
 					} else {
-						log.Warn("failed to extract pdf text", "path", p, "error", err)
+						log.Warn("failed to extract pdf content", "path", p, "error", err)
 					}
 					return nil
 				}

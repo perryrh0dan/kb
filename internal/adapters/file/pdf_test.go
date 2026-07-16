@@ -1,37 +1,38 @@
 package file
 
 import (
+	"context"
 	"errors"
 	"strings"
 	"testing"
 )
 
-func TestExtractPDFText(t *testing.T) {
-	text, err := extractPDFText("testdata/sample.pdf")
+func TestExtractPDFContent(t *testing.T) {
+	// Vision disabled — behaves like old extractPDFText
+	content, err := extractPDFContent(context.Background(), "testdata/sample.pdf", Options{})
 	if err != nil {
-		t.Fatalf("extractPDFText: %v", err)
+		t.Fatalf("extractPDFContent: %v", err)
 	}
-	if !strings.Contains(text, "Hello from PDF") {
-		t.Errorf("expected 'Hello from PDF' in extracted text, got: %q", text)
+	if !strings.Contains(content, "Hello from PDF") {
+		t.Errorf("expected 'Hello from PDF' in content, got: %q", content)
 	}
-	if !strings.Contains(text, "test content for extraction") {
-		t.Errorf("expected 'test content for extraction' in extracted text, got: %q", text)
+	if !strings.Contains(content, "test content for extraction") {
+		t.Errorf("expected 'test content for extraction' in content, got: %q", content)
 	}
 }
 
-func TestExtractPDFTextCorrupted(t *testing.T) {
-	_, err := extractPDFText("testdata/corrupted.pdf")
+func TestExtractPDFContentCorrupted(t *testing.T) {
+	_, err := extractPDFContent(context.Background(), "testdata/corrupted.pdf", Options{})
 	if err == nil {
 		t.Fatal("expected error for corrupted PDF, got nil")
 	}
-	// Should not be errNoText — it should be an open/parse error
-	if errors.Is(err, errNoText) {
-		t.Errorf("expected open error, not errNoText")
+	if errors.Is(err, errNoContent) {
+		t.Errorf("expected open error, not errNoContent")
 	}
 }
 
-func TestExtractPDFTextNotFound(t *testing.T) {
-	_, err := extractPDFText("testdata/nonexistent.pdf")
+func TestExtractPDFContentNotFound(t *testing.T) {
+	_, err := extractPDFContent(context.Background(), "testdata/nonexistent.pdf", Options{})
 	if err == nil {
 		t.Fatal("expected error for missing file, got nil")
 	}

@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	oai "github.com/sashabaranov/go-openai"
 	"github.com/user/kb/config"
 	"github.com/user/kb/internal/adapters/confluence"
 	"github.com/user/kb/internal/adapters/file"
@@ -69,6 +70,20 @@ func newIngester(cfg *config.Config) (*ingest.Ingester, store.Store, error) {
 	return ingest.New(st, c, emb), st, nil
 }
 
+func buildFileOptions(cfg *config.Config) file.Options {
+	if !cfg.Vision.Enabled {
+		return file.Options{}
+	}
+	oaiCfg := oai.DefaultConfig(cfg.OpenAI.APIKey)
+	client := oai.NewClientWithConfig(oaiCfg)
+	return file.Options{
+		Vision: &file.VisionOptions{
+			Config: cfg.Vision,
+			Client: client,
+		},
+	}
+}
+
 func runIngestAll(cmd *cobra.Command, args []string) error {
 	if len(cfg.Sources) == 0 {
 		fmt.Println("No sources configured. Use `kb ingest file <path>` or `kb ingest confluence --space <KEY>` to add sources.")
@@ -100,7 +115,7 @@ func runSource(cmd *cobra.Command, ing *ingest.Ingester, src config.SourceConfig
 				exts = src.Extensions
 			}
 		}
-		s := file.New(src.Path, src.Recursive, exts, file.Options{})
+		s := file.New(src.Path, src.Recursive, exts, buildFileOptions(cfg))
 		stats, err := ing.Run(ctx, s, "file", force)
 		if err != nil {
 			return err
@@ -135,7 +150,7 @@ func runIngestFile(cmd *cobra.Command, args []string) error {
 	defer st.Close()
 
 	ctx := cmd.Context()
-	src := file.New(path, flagRecursive, exts, file.Options{})
+	src := file.New(path, flagRecursive, exts, buildFileOptions(cfg))
 	stats, err := ing.Run(ctx, src, "file", flagFileForce)
 	if err != nil {
 		return err
