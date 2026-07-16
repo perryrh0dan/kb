@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
@@ -72,6 +73,17 @@ func newViper() *viper.Viper {
 	return v
 }
 
+// expandHome replaces a leading ~/ with the current user's home directory.
+func expandHome(path string) string {
+	if strings.HasPrefix(path, "~/") {
+		home, err := os.UserHomeDir()
+		if err == nil {
+			return filepath.Join(home, path[2:])
+		}
+	}
+	return path
+}
+
 func mustHomeDir() string {
 	h, err := os.UserHomeDir()
 	if err != nil {
@@ -104,6 +116,7 @@ func LoadFrom(path string) (*Config, error) {
 	if err := v.Unmarshal(&cfg); err != nil {
 		return nil, err
 	}
+	cfg.DB.Path = expandHome(cfg.DB.Path)
 	return &cfg, nil
 }
 
