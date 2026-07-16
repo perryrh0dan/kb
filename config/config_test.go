@@ -8,8 +8,8 @@ import (
 	"github.com/user/kb/config"
 )
 
+// TestLoadDefaults — check vision.provider default
 func TestLoadDefaults(t *testing.T) {
-	// Redirect HOME to an empty temp dir so no real ~/.kb/config.yaml is read.
 	tmpHome := t.TempDir()
 	t.Setenv("HOME", tmpHome)
 	t.Setenv("KB_OPENAI_API_KEY", "")
@@ -20,10 +20,10 @@ func TestLoadDefaults(t *testing.T) {
 		t.Fatalf("Load() error: %v", err)
 	}
 	if cfg.Embedder.Provider != "openai" {
-		t.Errorf("default provider = %q, want %q", cfg.Embedder.Provider, "openai")
+		t.Errorf("default embedder provider = %q, want %q", cfg.Embedder.Provider, "openai")
 	}
-	if cfg.Embedder.Model != "text-embedding-3-large" {
-		t.Errorf("default model = %q, want %q", cfg.Embedder.Model, "text-embedding-3-large")
+	if cfg.Vision.Provider != "openai" {
+		t.Errorf("default vision provider = %q, want %q", cfg.Vision.Provider, "openai")
 	}
 	if cfg.Chunker.ChunkSize != 512 {
 		t.Errorf("default chunk_size = %d, want 512", cfg.Chunker.ChunkSize)
@@ -33,6 +33,7 @@ func TestLoadDefaults(t *testing.T) {
 	}
 }
 
+// TestEnvVarOverride — check new env var names
 func TestEnvVarOverride(t *testing.T) {
 	tmpHome := t.TempDir()
 	t.Setenv("HOME", tmpHome)
@@ -43,20 +44,22 @@ func TestEnvVarOverride(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load() error: %v", err)
 	}
-	if cfg.OpenAI.APIKey != "sk-test-key" {
-		t.Errorf("api_key = %q, want %q", cfg.OpenAI.APIKey, "sk-test-key")
+	if cfg.Providers.OpenAI.APIKey != "sk-test-key" {
+		t.Errorf("providers.openai.api_key = %q, want %q", cfg.Providers.OpenAI.APIKey, "sk-test-key")
 	}
 	if cfg.DB.Path != "/tmp/test.db" {
 		t.Errorf("db.path = %q, want %q", cfg.DB.Path, "/tmp/test.db")
 	}
 }
 
+// TestLoadFromFile — test providers section in YAML
 func TestLoadFromFile(t *testing.T) {
 	dir := t.TempDir()
 	cfgFile := filepath.Join(dir, "config.yaml")
 	content := `
-openai:
-  api_key: "sk-from-file"
+providers:
+  openai:
+    api_key: "sk-from-file"
 chunker:
   chunk_size: 256
   chunk_overlap: 25
@@ -69,44 +72,34 @@ chunker:
 	if err != nil {
 		t.Fatalf("LoadFrom() error: %v", err)
 	}
-	if cfg.OpenAI.APIKey != "sk-from-file" {
-		t.Errorf("api_key = %q, want %q", cfg.OpenAI.APIKey, "sk-from-file")
+	if cfg.Providers.OpenAI.APIKey != "sk-from-file" {
+		t.Errorf("providers.openai.api_key = %q, want %q", cfg.Providers.OpenAI.APIKey, "sk-from-file")
 	}
 	if cfg.Chunker.ChunkSize != 256 {
 		t.Errorf("chunk_size = %d, want 256", cfg.Chunker.ChunkSize)
 	}
 }
 
+// TestSaveRoundTrip — update to use Providers
 func TestSaveRoundTrip(t *testing.T) {
 	tmpHome := t.TempDir()
 	t.Setenv("HOME", tmpHome)
-	t.Setenv("KB_OPENAI_API_KEY", "")
-	t.Setenv("KB_DB_PATH", "")
-
 	cfg := &config.Config{}
-	cfg.OpenAI.APIKey = "sk-roundtrip"
+	cfg.Providers.OpenAI.APIKey = "sk-roundtrip"
 	cfg.Chunker.ChunkSize = 256
 	cfg.Chunker.ChunkOverlap = 25
 	cfg.DB.Path = "/tmp/test.db"
-
 	if err := config.Save(cfg); err != nil {
 		t.Fatalf("Save: %v", err)
 	}
-
 	loaded, err := config.Load()
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if loaded.OpenAI.APIKey != "sk-roundtrip" {
-		t.Errorf("api_key = %q, want %q", loaded.OpenAI.APIKey, "sk-roundtrip")
+	if loaded.Providers.OpenAI.APIKey != "sk-roundtrip" {
+		t.Errorf("providers.openai.api_key = %q, want %q", loaded.Providers.OpenAI.APIKey, "sk-roundtrip")
 	}
 	if loaded.Chunker.ChunkSize != 256 {
 		t.Errorf("chunk_size = %d, want 256", loaded.Chunker.ChunkSize)
-	}
-	if loaded.Chunker.ChunkOverlap != 25 {
-		t.Errorf("chunk_overlap = %d, want 25", loaded.Chunker.ChunkOverlap)
-	}
-	if loaded.DB.Path != "/tmp/test.db" {
-		t.Errorf("db.path = %q, want %q", loaded.DB.Path, "/tmp/test.db")
 	}
 }

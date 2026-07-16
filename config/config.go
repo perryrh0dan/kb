@@ -9,8 +9,22 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-type OpenAIConfig struct {
+// ProviderConfig holds credentials for a standard OpenAI-compatible endpoint.
+type ProviderConfig struct {
 	APIKey string `mapstructure:"api_key" yaml:"api_key"`
+}
+
+// AzureProviderConfig holds credentials and endpoint info for Azure OpenAI.
+type AzureProviderConfig struct {
+	APIKey     string `mapstructure:"api_key"     yaml:"api_key"`
+	BaseURL    string `mapstructure:"base_url"    yaml:"base_url"`
+	APIVersion string `mapstructure:"api_version" yaml:"api_version"`
+}
+
+// ProvidersConfig holds configuration for all supported LLM/embedding providers.
+type ProvidersConfig struct {
+	OpenAI ProviderConfig      `mapstructure:"openai" yaml:"openai"`
+	Azure  AzureProviderConfig `mapstructure:"azure"  yaml:"azure"`
 }
 
 type ConfluenceConfig struct {
@@ -35,9 +49,10 @@ type ChunkerConfig struct {
 }
 
 type VisionConfig struct {
-	Enabled bool    `mapstructure:"enabled" yaml:"enabled"`
-	Model   string  `mapstructure:"model"   yaml:"model"`
-	DPI     float64 `mapstructure:"dpi"     yaml:"dpi"`
+	Enabled  bool    `mapstructure:"enabled"   yaml:"enabled"`
+	Provider string  `mapstructure:"provider"  yaml:"provider"`
+	Model    string  `mapstructure:"model"     yaml:"model"`
+	DPI      float64 `mapstructure:"dpi"       yaml:"dpi"`
 }
 
 type SourceConfig struct {
@@ -50,7 +65,7 @@ type SourceConfig struct {
 }
 
 type Config struct {
-	OpenAI     OpenAIConfig     `mapstructure:"openai"      yaml:"openai"`
+	Providers  ProvidersConfig  `mapstructure:"providers"   yaml:"providers"`
 	Confluence ConfluenceConfig `mapstructure:"confluence"  yaml:"confluence"`
 	DB         DBConfig         `mapstructure:"db"          yaml:"db"`
 	Embedder   EmbedderConfig   `mapstructure:"embedder"    yaml:"embedder"`
@@ -71,14 +86,19 @@ func newViper() *viper.Viper {
 	v.SetDefault("chunker.chunk_overlap", 50)
 	v.SetDefault("db.path", filepath.Join(mustHomeDir(), ".kb", "kb.db"))
 	v.SetDefault("vision.enabled", false)
+	v.SetDefault("vision.provider", "openai")
 	v.SetDefault("vision.model", "gpt-4o")
 	v.SetDefault("vision.dpi", 150.0)
+	v.SetDefault("providers.azure.api_version", "2024-02-15-preview")
 
 	v.SetEnvPrefix("KB")
-	v.BindEnv("openai.api_key", "KB_OPENAI_API_KEY")            //nolint:errcheck
-	v.BindEnv("confluence.api_token", "KB_CONFLUENCE_API_TOKEN") //nolint:errcheck
-	v.BindEnv("confluence.pat", "KB_CONFLUENCE_PAT")            //nolint:errcheck
-	v.BindEnv("db.path", "KB_DB_PATH")                          //nolint:errcheck
+	v.BindEnv("providers.openai.api_key",    "KB_OPENAI_API_KEY")        //nolint:errcheck
+	v.BindEnv("providers.azure.api_key",     "KB_AZURE_API_KEY")         //nolint:errcheck
+	v.BindEnv("providers.azure.base_url",    "KB_AZURE_BASE_URL")        //nolint:errcheck
+	v.BindEnv("providers.azure.api_version", "KB_AZURE_API_VERSION")     //nolint:errcheck
+	v.BindEnv("confluence.api_token",        "KB_CONFLUENCE_API_TOKEN")  //nolint:errcheck
+	v.BindEnv("confluence.pat",              "KB_CONFLUENCE_PAT")        //nolint:errcheck
+	v.BindEnv("db.path",                     "KB_DB_PATH")               //nolint:errcheck
 
 	return v
 }
@@ -141,8 +161,14 @@ func InitDefault() error {
 	}
 	content := `# kb configuration
 
-openai:
-  api_key: ""  # or set KB_OPENAI_API_KEY env var
+providers:
+  openai:
+    api_key: ""  # or set KB_OPENAI_API_KEY env var
+
+  azure:         # optional — only fill in if using Azure OpenAI
+    api_key: ""  # or set KB_AZURE_API_KEY env var
+    base_url: "" # e.g. https://my-resource.openai.azure.com/
+    api_version: "2024-02-15-preview"  # or set KB_AZURE_API_VERSION
 
 confluence:
   base_url: ""
@@ -154,7 +180,7 @@ db:
   path: ~/.kb/kb.db  # or set KB_DB_PATH env var
 
 embedder:
-  provider: openai
+  provider: openai   # "openai" | "azure"
   model: text-embedding-3-large
 
 chunker:
@@ -162,9 +188,10 @@ chunker:
   chunk_overlap: 50
 
 vision:
-  enabled: false  # true to describe PDF images via GPT-4o Vision (requires api_key)
-  model: gpt-4o
-  dpi: 150        # resolution for SVG rendering (72-300)
+  enabled: false     # true to describe PDF images via Vision model
+  provider: openai   # "openai" | "azure"
+  model: gpt-4o      # for Azure: use the deployment name
+  dpi: 150
 
 # sources are auto-registered when you run: kb ingest file <path> / kb ingest confluence --space <KEY>
 sources: []
