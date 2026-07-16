@@ -6,6 +6,7 @@ import (
 	oai "github.com/sashabaranov/go-openai"
 	"github.com/user/kb/config"
 	azprovider "github.com/user/kb/internal/provider/azure"
+	genaihub "github.com/user/kb/internal/provider/genaihub"
 	oaiprovider "github.com/user/kb/internal/provider/openai"
 )
 
@@ -26,9 +27,11 @@ func New(name string, cfg config.ProvidersConfig) (Provider, error) {
 	switch name {
 	case "azure":
 		return azprovider.New(cfg.Azure)
+	case "genai_hub":
+		return genaihub.New(cfg.GenAIHub)
 	case "openai", "":
 		return oaiprovider.New(cfg.OpenAI)
 	default:
-		return nil, fmt.Errorf("unknown provider %q: must be \"openai\" or \"azure\"", name)
+		return nil, fmt.Errorf("unknown provider %q: must be \"openai\", \"azure\", or \"genai_hub\"", name)
 	}
 }
