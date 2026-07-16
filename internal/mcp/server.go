@@ -133,6 +133,15 @@ func (s *Server) Run(ctx context.Context) error {
 				IsError: true,
 			}, nil, nil
 		}
+		chunks, err := s.store.GetChunks(ctx, args.DocumentID)
+		if err != nil {
+			log.Warn("store GetChunks failed", "document_id", args.DocumentID, "error", err)
+			return &mcp.CallToolResult{
+				Content: []mcp.Content{&mcp.TextContent{Text: err.Error()}},
+				IsError: true,
+			}, nil, nil
+		}
+		doc.Content = reconstructContent(chunks)
 		b, err := json.Marshal(doc)
 		if err != nil {
 			log.Error("json.Marshal failed for document", "document_id", args.DocumentID, "error", err)
