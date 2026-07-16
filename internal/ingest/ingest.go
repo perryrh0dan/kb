@@ -21,6 +21,28 @@ type IngestStats struct {
 	Errors   int
 }
 
+// ProgressAction describes what happened to a document during ingest.
+type ProgressAction string
+
+const (
+	ActionIngested ProgressAction = "ingested"
+	ActionSkipped  ProgressAction = "skipped"
+	ActionError    ProgressAction = "error"
+	ActionPruned   ProgressAction = "pruned"
+)
+
+// ProgressEvent is emitted once per document processed during an ingest run.
+type ProgressEvent struct {
+	Action ProgressAction
+	Title  string // document title or short identifier
+	Total  int    // running count of all processed documents so far (incl. skipped/errors)
+}
+
+// ProgressFunc is called once per document during RunWithProgress.
+// It is always called synchronously in the ingest goroutine.
+// A nil ProgressFunc is valid — no progress events are emitted.
+type ProgressFunc func(ProgressEvent)
+
 // Ingester orchestrates Adapter → Chunker → Embedder → Store.
 type Ingester struct {
 	store    store.Store
@@ -34,9 +56,23 @@ func New(st store.Store, c *chunker.Chunker, emb embedder.Embedder) *Ingester {
 }
 
 // Run ingests all documents from src. force=true skips hash check.
+// No progress events are emitted; use RunWithProgress for live feedback.
 func (ing *Ingester) Run(ctx context.Context, src adapters.Source, sourceType string, force bool) (IngestStats, error) {
+	return ing.RunWithProgress(ctx, src, sourceType, force, nil)
+}
+
+// RunWithProgress ingests all documents from src, calling progress for each
+// document processed. progress may be nil.
+func (ing *Ingester) RunWithProgress(ctx context.Context, src adapters.Source, sourceType string, force bool, progress ProgressFunc) (IngestStats, error) {
 	log := slog.Default()
 	var stats IngestStats
+	var total int
+
+	emit := func(action ProgressAction, title string) {
+		if progress != nil {
+			progress(ProgressEvent{Action: action, Title: title, Total: total})
+		}
+	}
 
 	// Use the source's scope prefix to limit pruning to only documents that
 	// belong to this specific source (e.g. one directory, one Confluence space).
@@ -70,6 +106,8 @@ func (ing *Ingester) Run(ctx context.Context, src adapters.Source, sourceType st
 			if err == nil && existing != nil && existing.ContentHash == meta.ContentHash {
 				log.Debug("document unchanged, skipping", "id", meta.ID)
 				stats.Skipped++
+				total++
+				emit(ActionSkipped, meta.Title)
 				continue
 			}
 		}
@@ -78,6 +116,8 @@ func (ing *Ingester) Run(ctx context.Context, src adapters.Source, sourceType st
 		if err != nil {
 			log.Warn("load failed", "id", meta.ID, "error", err)
 			stats.Errors++
+			total++
+			emit(ActionError, meta.Title)
 			continue
 		}
 
@@ -93,6 +133,8 @@ func (ing *Ingester) Run(ctx context.Context, src adapters.Source, sourceType st
 			if strings.TrimSpace(doc.Content) == "" {
 				log.Debug("skipping document with empty content", "id", doc.ID)
 				stats.Skipped++
+				total++
+				emit(ActionSkipped, doc.Title)
 				continue
 			}
 			chunks = []string{doc.Content}
@@ -104,6 +146,8 @@ func (ing *Ingester) Run(ctx context.Context, src adapters.Source, sourceType st
 		if err != nil {
 			log.Warn("embedding failed", "id", doc.ID, "chunks", len(chunks), "error", err)
 			stats.Errors++
+			total++
+			emit(ActionError, doc.Title)
 			continue
 		}
 
@@ -143,6 +187,8 @@ func (ing *Ingester) Run(ctx context.Context, src adapters.Source, sourceType st
 		}
 		log.Info("document ingested", "id", doc.ID, "chunks", len(chunks))
 		stats.Ingested++
+		total++
+		emit(ActionIngested, doc.Title)
 	}
 
 	// Phase 2: prune documents no longer in source
@@ -150,11 +196,13 @@ func (ing *Ingester) Run(ctx context.Context, src adapters.Source, sourceType st
 		if !seen[id] {
 			log.Debug("pruning deleted document", "id", id)
 			if err := ing.store.DeleteDocument(ctx, id); err != nil {
-				log.Warn("failed to prune document", "id", id, "error", err)
+				log.Warn("failed to prune document", "id", id, "error", id)
 				stats.Errors++
 			} else {
 				log.Info("document pruned", "id", id)
 				stats.Pruned++
+				total++
+				emit(ActionPruned, id)
 			}
 		}
 	}

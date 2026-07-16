@@ -17,6 +17,34 @@ import (
 	"github.com/user/kb/internal/store"
 )
 
+// progressPrinter returns an ingest.ProgressFunc that writes one line per
+// document to stdout. It is a no-op when stdout is not a terminal.
+func progressPrinter(label string) ingest.ProgressFunc {
+	// Only print progress when stdout is a real terminal.
+	fi, err := os.Stdout.Stat()
+	if err != nil || (fi.Mode()&os.ModeCharDevice) == 0 {
+		return nil
+	}
+	return func(e ingest.ProgressEvent) {
+		var symbol string
+		switch e.Action {
+		case ingest.ActionIngested:
+			symbol = "✓"
+		case ingest.ActionSkipped:
+			symbol = "~"
+		case ingest.ActionPruned:
+			symbol = "-"
+		case ingest.ActionError:
+			symbol = "✗"
+		}
+		title := e.Title
+		if len(title) > 60 {
+			title = title[:57] + "..."
+		}
+		fmt.Fprintf(os.Stdout, "[%4d] %s %-8s  %s\n", e.Total, symbol, e.Action, title)
+	}
+}
+
 var ingestCmd = &cobra.Command{
 	Use:   "ingest",
 	Short: "Ingest documents into the knowledge base",
@@ -123,7 +151,7 @@ func runSource(cmd *cobra.Command, ing *ingest.Ingester, src config.SourceConfig
 			return err
 		}
 		s := file.New(src.Path, src.Recursive, exts, opts)
-		stats, err := ing.Run(ctx, s, "file", force)
+		stats, err := ing.RunWithProgress(ctx, s, "file", force, progressPrinter(src.Path))
 		if err != nil {
 			return err
 		}
@@ -131,7 +159,7 @@ func runSource(cmd *cobra.Command, ing *ingest.Ingester, src config.SourceConfig
 			src.Path, stats.Ingested, stats.Skipped, stats.Pruned, stats.Errors)
 	case "confluence":
 		s := confluence.New(cfg.Confluence, src.Space, src.PageID)
-		stats, err := ing.Run(ctx, s, "confluence", force)
+		stats, err := ing.RunWithProgress(ctx, s, "confluence", force, progressPrinter(src.Space))
 		if err != nil {
 			return err
 		}
@@ -165,7 +193,7 @@ func runIngestFile(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	src := file.New(absPath, flagRecursive, exts, opts)
-	stats, err := ing.Run(ctx, src, "file", flagFileForce)
+	stats, err := ing.RunWithProgress(ctx, src, "file", flagFileForce, progressPrinter(absPath))
 	if err != nil {
 		return err
 	}
@@ -187,7 +215,7 @@ func runIngestConfluence(cmd *cobra.Command, args []string) error {
 
 	ctx := cmd.Context()
 	src := confluence.New(cfg.Confluence, flagSpace, flagPageID)
-	stats, err := ing.Run(ctx, src, "confluence", flagConfForce)
+	stats, err := ing.RunWithProgress(ctx, src, "confluence", flagConfForce, progressPrinter(flagSpace))
 	if err != nil {
 		return err
 	}
