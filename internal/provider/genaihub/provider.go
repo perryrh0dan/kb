@@ -48,13 +48,8 @@ func New(cfg config.GenAIHubProviderConfig) (*genAIHubProvider, error) {
 
 	transport := NewTokenTransport(tokenSource, cfg.APIKey, nil)
 
-	apiVersion := cfg.APIVersion
-	if apiVersion == "" {
-		apiVersion = "2024-02-15-preview"
-	}
-
-	oaiCfg := oai.DefaultAzureConfig("", cfg.Endpoint)
-	oaiCfg.APIVersion = apiVersion
+	oaiCfg := oai.DefaultConfig("")
+	oaiCfg.BaseURL = cfg.Endpoint
 	oaiCfg.HTTPClient = &http.Client{Transport: transport}
 
 	return &genAIHubProvider{client: oai.NewClientWithConfig(oaiCfg)}, nil
