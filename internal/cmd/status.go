@@ -39,12 +39,12 @@ var configCmd = &cobra.Command{
 
 var configInitCmd = &cobra.Command{
 	Use:   "init",
-	Short: "Create default config file at ~/.kb/config.yaml",
+	Short: "Create default config file (or use KB_CONFIG_PATH)",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if err := config.InitDefault(); err != nil {
 			return err
 		}
-		fmt.Println("Config created at ~/.kb/config.yaml")
+		fmt.Printf("Config created at %s\n", config.Path())
 		return nil
 	},
 }

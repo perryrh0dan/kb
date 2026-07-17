@@ -57,7 +57,7 @@ type ConfluenceConfig struct {
 	TLSInsecureSkipVerify bool   `mapstructure:"tls_insecure_skip_verify" yaml:"tls_insecure_skip_verify"`
 	// APIVersion selects the Confluence REST API version: "v1" (Data Center /rest/api/)
 	// or "v2" (Cloud/modern DC, /wiki/api/v2/). Defaults to "v2".
-	APIVersion            string `mapstructure:"api_version"              yaml:"api_version,omitempty"`
+	APIVersion string `mapstructure:"api_version"              yaml:"api_version,omitempty"`
 }
 
 type DBConfig struct {
@@ -100,7 +100,12 @@ type Config struct {
 	Sources    []SourceConfig   `mapstructure:"sources"     yaml:"sources"`
 }
 
-func defaultConfigPath() string {
+// Path returns the active configuration path. KB_CONFIG_PATH overrides the
+// default ~/.kb/config.yaml location for loading and saving configuration.
+func Path() string {
+	if path := os.Getenv("KB_CONFIG_PATH"); path != "" {
+		return expandHome(path)
+	}
 	return filepath.Join(mustHomeDir(), ".kb", "config.yaml")
 }
 
@@ -118,29 +123,29 @@ func newViper() *viper.Viper {
 	v.SetDefault("providers.azure.api_version", "2024-02-15-preview")
 
 	v.SetEnvPrefix("KB")
-	v.BindEnv("providers.openai.api_key",    "KB_OPENAI_API_KEY")        //nolint:errcheck
-	v.BindEnv("providers.azure.api_key",     "KB_AZURE_API_KEY")         //nolint:errcheck
-	v.BindEnv("providers.azure.base_url",    "KB_AZURE_BASE_URL")        //nolint:errcheck
-	v.BindEnv("providers.azure.api_version", "KB_AZURE_API_VERSION")     //nolint:errcheck
+	v.BindEnv("providers.openai.api_key", "KB_OPENAI_API_KEY")       //nolint:errcheck
+	v.BindEnv("providers.azure.api_key", "KB_AZURE_API_KEY")         //nolint:errcheck
+	v.BindEnv("providers.azure.base_url", "KB_AZURE_BASE_URL")       //nolint:errcheck
+	v.BindEnv("providers.azure.api_version", "KB_AZURE_API_VERSION") //nolint:errcheck
 
 	v.SetDefault("providers.oauth_openai.api_version", "2024-02-15-preview")
 	v.SetDefault("providers.oauth_openai.routing", "azure")
 
-	v.BindEnv("providers.oauth_openai.endpoint",                "KB_OAUTH_OPENAI_ENDPOINT")                //nolint:errcheck
-	v.BindEnv("providers.oauth_openai.api_key",                 "KB_OAUTH_OPENAI_API_KEY")                 //nolint:errcheck
-	v.BindEnv("providers.oauth_openai.token_url",               "KB_OAUTH_OPENAI_TOKEN_URL")               //nolint:errcheck
-	v.BindEnv("providers.oauth_openai.client_id",               "KB_OAUTH_OPENAI_CLIENT_ID")              //nolint:errcheck
-	v.BindEnv("providers.oauth_openai.client_secret",           "KB_OAUTH_OPENAI_CLIENT_SECRET")           //nolint:errcheck
-	v.BindEnv("providers.oauth_openai.scope",                   "KB_OAUTH_OPENAI_SCOPE")                   //nolint:errcheck
-	v.BindEnv("providers.oauth_openai.api_version",             "KB_OAUTH_OPENAI_API_VERSION")             //nolint:errcheck
-	v.BindEnv("providers.oauth_openai.routing",                 "KB_OAUTH_OPENAI_ROUTING")                 //nolint:errcheck
-	v.BindEnv("providers.oauth_openai.tls_insecure_skip_verify","KB_OAUTH_OPENAI_TLS_INSECURE_SKIP_VERIFY") //nolint:errcheck
-	v.BindEnv("providers.oauth_openai.tls_ca_cert_file",        "KB_OAUTH_OPENAI_TLS_CA_CERT_FILE")        //nolint:errcheck
+	v.BindEnv("providers.oauth_openai.endpoint", "KB_OAUTH_OPENAI_ENDPOINT")                                 //nolint:errcheck
+	v.BindEnv("providers.oauth_openai.api_key", "KB_OAUTH_OPENAI_API_KEY")                                   //nolint:errcheck
+	v.BindEnv("providers.oauth_openai.token_url", "KB_OAUTH_OPENAI_TOKEN_URL")                               //nolint:errcheck
+	v.BindEnv("providers.oauth_openai.client_id", "KB_OAUTH_OPENAI_CLIENT_ID")                               //nolint:errcheck
+	v.BindEnv("providers.oauth_openai.client_secret", "KB_OAUTH_OPENAI_CLIENT_SECRET")                       //nolint:errcheck
+	v.BindEnv("providers.oauth_openai.scope", "KB_OAUTH_OPENAI_SCOPE")                                       //nolint:errcheck
+	v.BindEnv("providers.oauth_openai.api_version", "KB_OAUTH_OPENAI_API_VERSION")                           //nolint:errcheck
+	v.BindEnv("providers.oauth_openai.routing", "KB_OAUTH_OPENAI_ROUTING")                                   //nolint:errcheck
+	v.BindEnv("providers.oauth_openai.tls_insecure_skip_verify", "KB_OAUTH_OPENAI_TLS_INSECURE_SKIP_VERIFY") //nolint:errcheck
+	v.BindEnv("providers.oauth_openai.tls_ca_cert_file", "KB_OAUTH_OPENAI_TLS_CA_CERT_FILE")                 //nolint:errcheck
 
-	v.BindEnv("confluence.api_token",        "KB_CONFLUENCE_API_TOKEN")  //nolint:errcheck
-	v.BindEnv("confluence.pat",              "KB_CONFLUENCE_PAT")        //nolint:errcheck
+	v.BindEnv("confluence.api_token", "KB_CONFLUENCE_API_TOKEN")                               //nolint:errcheck
+	v.BindEnv("confluence.pat", "KB_CONFLUENCE_PAT")                                           //nolint:errcheck
 	v.BindEnv("confluence.tls_insecure_skip_verify", "KB_CONFLUENCE_TLS_INSECURE_SKIP_VERIFY") //nolint:errcheck
-	v.BindEnv("db.path",                     "KB_DB_PATH")               //nolint:errcheck
+	v.BindEnv("db.path", "KB_DB_PATH")                                                         //nolint:errcheck
 
 	return v
 }
@@ -164,9 +169,9 @@ func mustHomeDir() string {
 	return h
 }
 
-// Load reads config from the default path (~/.kb/config.yaml) with env-var overrides.
+// Load reads config from Path with env-var overrides.
 func Load() (*Config, error) {
-	return LoadFrom(defaultConfigPath())
+	return LoadFrom(Path())
 }
 
 // LoadFrom reads config from the given file path with env-var overrides.
@@ -192,9 +197,9 @@ func LoadFrom(path string) (*Config, error) {
 	return &cfg, nil
 }
 
-// InitDefault writes a default config file to ~/.kb/config.yaml.
+// InitDefault writes a default config file to Path.
 func InitDefault() error {
-	path := defaultConfigPath()
+	path := Path()
 	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
 		return err
 	}
@@ -255,7 +260,7 @@ sources: []
 
 // Save writes the config back to disk using yaml tags for correct key names.
 func Save(cfg *Config) error {
-	path := defaultConfigPath()
+	path := Path()
 	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
 		return err
 	}

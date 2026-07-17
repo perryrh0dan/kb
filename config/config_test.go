@@ -3,6 +3,7 @@ package config_test
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/user/kb/config"
@@ -103,6 +104,47 @@ func TestOAuthOpenAIEnvVars(t *testing.T) {
 	}
 	if cfg.Providers.OAuthOpenAI.Routing != "openai" {
 		t.Errorf("OAuthOpenAI.Routing = %q, want %q", cfg.Providers.OAuthOpenAI.Routing, "openai")
+	}
+}
+
+func TestConfigPathEnvOverride(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "workspace", "config.yaml")
+	t.Setenv("KB_CONFIG_PATH", path)
+
+	if got := config.Path(); got != path {
+		t.Fatalf("Path() = %q, want %q", got, path)
+	}
+}
+
+func TestLoadAndSaveUseConfigPathEnvOverride(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "workspace", "config.yaml")
+	t.Setenv("KB_CONFIG_PATH", path)
+
+	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("embedder:\n  model: custom-model\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.Embedder.Model != "custom-model" {
+		t.Fatalf("Embedder.Model = %q, want custom-model", cfg.Embedder.Model)
+	}
+
+	cfg.Embedder.Model = "saved-model"
+	if err := config.Save(cfg); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(content), "model: saved-model") {
+		t.Fatalf("saved config did not use KB_CONFIG_PATH: %s", content)
 	}
 }
 
