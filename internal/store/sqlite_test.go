@@ -99,6 +99,30 @@ func TestDeleteDocumentCascadesToChunks(t *testing.T) {
 	}
 }
 
+func TestSearchUsesVec0Index(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	doc := adapters.Document{DocumentMeta: adapters.DocumentMeta{
+		ID: "file:///tmp/search.md", Title: "Search", ContentHash: "h1", SourceType: "file", Metadata: map[string]string{}, IngestedAt: time.Now().UTC(),
+	}}
+	if err := s.UpsertDocument(ctx, doc); err != nil {
+		t.Fatalf("UpsertDocument: %v", err)
+	}
+	vector := make([]float32, 3072)
+	vector[0] = 1
+	if err := s.SaveChunks(ctx, []store.Chunk{{ID: "search-chunk", DocumentID: doc.ID, Content: "search content", ChunkIndex: 0, Embedding: vector}}); err != nil {
+		t.Fatalf("SaveChunks: %v", err)
+	}
+
+	results, err := s.Search(ctx, vector, 1, 0, "file")
+	if err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+	if len(results) != 1 || results[0].Chunk.ID != "search-chunk" {
+		t.Fatalf("Search results = %#v, want search-chunk", results)
+	}
+}
+
 func TestGetAllDocumentIDs(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
@@ -109,12 +133,12 @@ func TestGetAllDocumentIDs(t *testing.T) {
 		}
 		_ = s.UpsertDocument(ctx, adapters.Document{
 			DocumentMeta: adapters.DocumentMeta{
-				ID:         id,
-				Title:      id,
+				ID:          id,
+				Title:       id,
 				ContentHash: "h",
-				SourceType: src,
-				Metadata:   map[string]string{},
-				IngestedAt: time.Now().UTC(),
+				SourceType:  src,
+				Metadata:    map[string]string{},
+				IngestedAt:  time.Now().UTC(),
 			},
 			Content: "x",
 		})
