@@ -11,8 +11,7 @@ CREATE TABLE IF NOT EXISTS chunks (
     id          TEXT PRIMARY KEY,
     document_id TEXT NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
     content     TEXT NOT NULL,
-    chunk_index INTEGER NOT NULL,
-    embedding   F32_BLOB(3072)
+    chunk_index INTEGER NOT NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_chunks_document_id ON chunks(document_id);

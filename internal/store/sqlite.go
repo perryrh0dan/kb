@@ -180,7 +180,7 @@ func (s *sqliteStore) SaveChunks(ctx context.Context, chunks []Chunk) error {
 	}
 	defer tx.Rollback()
 	stmt, err := tx.PrepareContext(ctx,
-		`INSERT OR REPLACE INTO chunks (id, document_id, content, chunk_index, embedding) VALUES (?, ?, ?, ?, NULL)`)
+		`INSERT OR REPLACE INTO chunks (id, document_id, content, chunk_index) VALUES (?, ?, ?, ?)`)
 	if err != nil {
 		return err
 	}
