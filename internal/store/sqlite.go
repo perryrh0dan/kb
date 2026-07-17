@@ -46,38 +46,7 @@ func NewSQLite(dbPath string) (Store, error) {
 		db.Close()
 		return nil, fmt.Errorf("run migrations: %w", err)
 	}
-	if err := backfillVectorIndex(db); err != nil {
-		db.Close()
-		return nil, fmt.Errorf("backfill vector index: %w", err)
-	}
 	return &sqliteStore{db: db}, nil
-}
-
-// backfillVectorIndex keeps existing databases compatible with the vec0 search
-// path. Existing rows are left untouched so opening the database is idempotent.
-func backfillVectorIndex(db *sql.DB) error {
-	var chunkCount, vectorCount int
-	if err := db.QueryRow(`SELECT count(*) FROM chunks WHERE embedding IS NOT NULL`).Scan(&chunkCount); err != nil {
-		return err
-	}
-	if err := db.QueryRow(`SELECT count(*) FROM chunk_vectors`).Scan(&vectorCount); err != nil {
-		return err
-	}
-	if chunkCount == vectorCount {
-		return nil
-	}
-	if vectorCount > 0 {
-		if _, err := db.Exec(`DELETE FROM chunk_vectors`); err != nil {
-			return err
-		}
-	}
-	_, err := db.Exec(`
-		INSERT INTO chunk_vectors(chunk_id, source_type, embedding)
-		SELECT c.id, d.source_type, c.embedding
-		FROM chunks c
-		JOIN documents d ON d.id = c.document_id
-		WHERE c.embedding IS NOT NULL`)
-	return err
 }
 
 func (s *sqliteStore) Close() error { return s.db.Close() }
@@ -115,20 +84,8 @@ func (s *sqliteStore) UpsertDocument(ctx context.Context, doc adapters.Document)
 }
 
 func (s *sqliteStore) DeleteDocument(ctx context.Context, id string) error {
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-	if _, err := tx.ExecContext(ctx, `
-		DELETE FROM chunk_vectors
-		WHERE chunk_id IN (SELECT id FROM chunks WHERE document_id = ?)`, id); err != nil {
-		return err
-	}
-	if _, err := tx.ExecContext(ctx, `DELETE FROM documents WHERE id = ?`, id); err != nil {
-		return err
-	}
-	return tx.Commit()
+	_, err := s.db.ExecContext(ctx, `DELETE FROM documents WHERE id = ?`, id)
+	return err
 }
 
 func (s *sqliteStore) GetAllDocumentIDs(ctx context.Context, idPrefix string) ([]string, error) {
@@ -216,18 +173,6 @@ func (s *sqliteStore) SaveChunks(ctx context.Context, chunks []Chunk) error {
 		return err
 	}
 	defer stmt.Close()
-	vectorStmt, err := tx.PrepareContext(ctx, `
-		INSERT INTO chunk_vectors(chunk_id, source_type, embedding)
-		SELECT ?, source_type, ? FROM documents WHERE id = ?`)
-	if err != nil {
-		return err
-	}
-	defer vectorStmt.Close()
-	deleteVectorStmt, err := tx.PrepareContext(ctx, `DELETE FROM chunk_vectors WHERE chunk_id = ?`)
-	if err != nil {
-		return err
-	}
-	defer deleteVectorStmt.Close()
 	for _, ch := range chunks {
 		if ch.ID == "" {
 			ch.ID = uuid.New().String()
@@ -239,31 +184,13 @@ func (s *sqliteStore) SaveChunks(ctx context.Context, chunks []Chunk) error {
 		if _, err := stmt.ExecContext(ctx, ch.ID, ch.DocumentID, ch.Content, ch.ChunkIndex, embBytes); err != nil {
 			return err
 		}
-		if _, err := deleteVectorStmt.ExecContext(ctx, ch.ID); err != nil {
-			return err
-		}
-		if _, err := vectorStmt.ExecContext(ctx, ch.ID, embBytes, ch.DocumentID); err != nil {
-			return err
-		}
 	}
 	return tx.Commit()
 }
 
 func (s *sqliteStore) DeleteChunks(ctx context.Context, documentID string) error {
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-	if _, err := tx.ExecContext(ctx, `
-		DELETE FROM chunk_vectors
-		WHERE chunk_id IN (SELECT id FROM chunks WHERE document_id = ?)`, documentID); err != nil {
-		return err
-	}
-	if _, err := tx.ExecContext(ctx, `DELETE FROM chunks WHERE document_id = ?`, documentID); err != nil {
-		return err
-	}
-	return tx.Commit()
+	_, err := s.db.ExecContext(ctx, `DELETE FROM chunks WHERE document_id = ?`, documentID)
+	return err
 }
 
 func (s *sqliteStore) Search(ctx context.Context, embedding []float32, limit int, minScore float64, sourceFilter string) ([]SearchResult, error) {
@@ -273,28 +200,21 @@ func (s *sqliteStore) Search(ctx context.Context, embedding []float32, limit int
 	}
 
 	query := `
-		WITH matches AS (
-			SELECT chunk_id, distance
-			FROM chunk_vectors
-			WHERE embedding MATCH ?
-			  AND k = ?`
+		SELECT c.id, c.document_id, c.content, c.chunk_index,
+		       (1 - vec_distance_cosine(c.embedding, ?)) AS score,
+		       d.title, d.source_type, d.content_hash, d.metadata, d.ingested_at
+		FROM chunks c
+		JOIN documents d ON c.document_id = d.id
+		WHERE c.embedding IS NOT NULL
+		  AND (1 - vec_distance_cosine(c.embedding, ?)) >= ?`
 
-	args := []interface{}{embBytes, limit}
+	args := []interface{}{embBytes, embBytes, minScore}
 	if sourceFilter != "" {
-		query += " AND source_type = ?"
+		query += " AND d.source_type = ?"
 		args = append(args, sourceFilter)
 	}
-	query += `
-		)
-		SELECT c.id, c.document_id, c.content, c.chunk_index,
-		       (1 - matches.distance) AS score,
-		       d.title, d.source_type, d.content_hash, d.metadata, d.ingested_at
-		FROM matches
-		JOIN chunks c ON c.id = matches.chunk_id
-		JOIN documents d ON c.document_id = d.id
-		WHERE (1 - matches.distance) >= ?
-		ORDER BY matches.distance ASC`
-	args = append(args, minScore)
+	query += " ORDER BY vec_distance_cosine(c.embedding, ?) ASC LIMIT ?"
+	args = append(args, embBytes, limit)
 
 	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {

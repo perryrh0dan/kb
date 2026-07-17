@@ -16,9 +16,3 @@ CREATE TABLE IF NOT EXISTS chunks (
 );
 
 CREATE INDEX IF NOT EXISTS idx_chunks_document_id ON chunks(document_id);
-
-CREATE VIRTUAL TABLE IF NOT EXISTS chunk_vectors USING vec0(
-    chunk_id TEXT PRIMARY KEY,
-    source_type TEXT PARTITION KEY,
-    embedding FLOAT[3072] distance_metric=cosine
-);

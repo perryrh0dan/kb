@@ -9,7 +9,7 @@
 - Semantic search powered by OpenAI `text-embedding-3-large`
 - Incremental sync with hash-based change detection and pruning of deleted documents
 - MCP stdio server with `search_knowledge_base`, `list_sources`, and `get_document` tools
-- Single binary, no external services required (SQLite with sqlite-vec `vec0` KNN search)
+- Single binary, no external services required (SQLite with sqlite-vec)
 
 ## Installation
 
@@ -39,11 +39,6 @@ kb config init
 
 This creates `~/.kb/config.yaml` with default settings. Edit it to add your OpenAI API key and any sources.
 
-### Vector search migration
-
-On startup, existing databases are automatically backfilled into the sqlite-vec
-`chunk_vectors` KNN table. The original embedding column is retained temporarily
-as a rollback safety net; no source documents or embeddings are re-created.
 
 ### 2. Ingest local files
 
