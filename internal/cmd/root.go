@@ -33,6 +33,7 @@ func init() {
 	rootCmd.AddCommand(statusCmd)
 	rootCmd.AddCommand(configCmd)
 	rootCmd.AddCommand(repairCmd)
+	rootCmd.AddCommand(benchmarkCmd)
 }
 
 // Execute is the entry point called from main.

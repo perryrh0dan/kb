@@ -9,7 +9,7 @@
 - Semantic search powered by OpenAI `text-embedding-3-large`
 - Incremental sync with hash-based change detection and pruning of deleted documents
 - MCP stdio server with `search_knowledge_base`, `list_sources`, and `get_document` tools
-- Single binary, no external services required (SQLite with sqlite-vec)
+- Single binary, no external services required (SQLite with sqlite-vec `vec0` KNN search)
 
 ## Installation
 
@@ -38,6 +38,15 @@ kb config init
 ```
 
 This creates `~/.kb/config.yaml` with default settings. Edit it to add your OpenAI API key and any sources.
+
+### Benchmark search
+
+Measure local vector-search latency without changing the database. Query embedding is
+performed once and reported separately from the repeated local search timing:
+
+```bash
+kb benchmark "Self Service Prozess" --iterations 20 --limit 10
+```
 
 
 ### 2. Ingest local files
