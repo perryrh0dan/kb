@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/user/kb/config"
+	"github.com/user/kb/internal/config"
 )
 
 // TestLoadDefaults — check vision.provider default

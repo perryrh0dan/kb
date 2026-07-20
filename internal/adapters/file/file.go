@@ -11,7 +11,7 @@ import (
 	"time"
 
 	oai "github.com/sashabaranov/go-openai"
-	"github.com/user/kb/config"
+	"github.com/user/kb/internal/config"
 	"github.com/user/kb/internal/adapters"
 	"github.com/user/kb/internal/store"
 )

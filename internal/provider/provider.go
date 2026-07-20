@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	oai "github.com/sashabaranov/go-openai"
-	"github.com/user/kb/config"
+	"github.com/user/kb/internal/config"
 	azprovider "github.com/user/kb/internal/provider/azure"
 	oauthopenai "github.com/user/kb/internal/provider/oauthopenai"
 	oaiprovider "github.com/user/kb/internal/provider/openai"

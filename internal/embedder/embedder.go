@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/user/kb/config"
+	"github.com/user/kb/internal/config"
 	oaiemb "github.com/user/kb/internal/embedder/openai"
 	"github.com/user/kb/internal/provider"
 )

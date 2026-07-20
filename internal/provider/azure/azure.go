@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	oai "github.com/sashabaranov/go-openai"
-	"github.com/user/kb/config"
+	"github.com/user/kb/internal/config"
 )
 
 type azureProvider struct {

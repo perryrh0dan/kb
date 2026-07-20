@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/user/kb/config"
+	"github.com/user/kb/internal/config"
 	"github.com/user/kb/internal/adapters/confluence"
 )
 

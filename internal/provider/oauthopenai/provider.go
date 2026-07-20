@@ -11,7 +11,7 @@ import (
 	oai "github.com/sashabaranov/go-openai"
 	"golang.org/x/oauth2/clientcredentials"
 
-	"github.com/user/kb/config"
+	"github.com/user/kb/internal/config"
 )
 
 type oauthOpenAIProvider struct {

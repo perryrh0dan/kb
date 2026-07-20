@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/user/kb/config"
+	"github.com/user/kb/internal/config"
 	"github.com/user/kb/internal/adapters"
 	"github.com/user/kb/internal/store"
 )

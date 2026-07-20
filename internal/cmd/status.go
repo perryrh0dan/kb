@@ -6,7 +6,7 @@ import (
 	"fmt"
 
 	"github.com/spf13/cobra"
-	"github.com/user/kb/config"
+	"github.com/user/kb/internal/config"
 	"github.com/user/kb/internal/store"
 )
 

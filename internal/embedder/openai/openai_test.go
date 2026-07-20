@@ -8,7 +8,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/user/kb/config"
+	"github.com/user/kb/internal/config"
 	oaiemb "github.com/user/kb/internal/embedder/openai"
 )
 

@@ -3,7 +3,7 @@ package oauthopenai_test
 import (
 	"testing"
 
-	"github.com/user/kb/config"
+	"github.com/user/kb/internal/config"
 	"github.com/user/kb/internal/provider/oauthopenai"
 )
 

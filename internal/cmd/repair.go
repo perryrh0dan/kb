@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
-	"github.com/user/kb/config"
+	"github.com/user/kb/internal/config"
 	"github.com/user/kb/internal/adapters"
 	"github.com/user/kb/internal/adapters/confluence"
 	"github.com/user/kb/internal/adapters/file"

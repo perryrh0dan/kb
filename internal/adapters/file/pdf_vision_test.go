@@ -12,7 +12,7 @@ import (
 	"testing"
 
 	"github.com/gen2brain/go-fitz"
-	"github.com/user/kb/config"
+	"github.com/user/kb/internal/config"
 	oai "github.com/sashabaranov/go-openai"
 )
 

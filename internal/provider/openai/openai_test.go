@@ -3,7 +3,7 @@ package openai_test
 import (
 	"testing"
 
-	"github.com/user/kb/config"
+	"github.com/user/kb/internal/config"
 	oaiprovider "github.com/user/kb/internal/provider/openai"
 )
 
